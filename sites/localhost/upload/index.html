@@ -1,0 +1,19 @@
+<html>
+<head>
+	<title>Upload test</title>
+</head>
+<body>
+	<form action="upload" enctype="multipart/form-data" method="post">
+		<input type="text" name="name" value="ivan dustin">
+		<input type="text" name="name[first]" value="ivan">
+		<input type="text" name="name[last]" value="bilon">
+		<input type="text" name="pets[]" value="mango tango jango">
+		<input type="text" name="pets[]" value="spot">
+		<input type="text" name="pets[]" value="eric">
+		<input type="text" name="pets[]" value="blacky">
+		<input type="file" name="upload" multiple="multiple">
+		<input type="file" name="upload2">
+		<input type="submit" value="upload">
+	</form>
+</body>
+</html>

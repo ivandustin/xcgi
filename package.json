@@ -1,0 +1,11 @@
+{
+	"title": "XCGI",
+	"description": "Utility for serving HTTP requests.",
+	"author": {
+		"name": "Ivan Dustin Bilon",
+		"email": "ivan22.dust@gmail.com"
+	},
+	"dependencies": {
+		"multiparty": "4.1"
+	}
+}
