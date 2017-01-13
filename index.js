@@ -203,8 +203,8 @@ function ExecuteFile(req, res, path, filename, env, root) {
 				}
 			})
 			proc.stderr.on('data', function(error) {
-				console.error('ERROR ACCESS:', path, filename)
-				console.error('SCRIPT ERROR:', error.toString())
+				console.error('STDERR PATH:', path, filename)
+				console.error('STDERR MSG:', error.toString())
 			})
 			proc.on('error', function(err) {
 				console.error('PROCESS ERROR:', err)
