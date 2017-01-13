@@ -212,6 +212,10 @@ function ExecuteFile(req, res, path, filename, env, root) {
 			proc.on('exit', function(code, signal) {
 				INSTANCE_COUNT--
 				ConsumeQueue()
+				if (code == null && signal == 'SIGTERM') {
+					console.warn('WARNING:', 'Tried to kill process but failed. Using "kill" command instead.')
+					spawn('kill', ['--', '-' + proc.pid])
+				}
 				if (code != null && code < 256 && code >= 0 && !signal) {
 					if (SCRIPT_STATUS_CODES.length > code)
 						res.statusCode = SCRIPT_STATUS_CODES[code]
