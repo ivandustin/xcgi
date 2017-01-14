@@ -440,7 +440,12 @@ var SERVER_HANDLER = function(req, res) {
 	ChooseExecutable(filepath, filename, rootpath, function(err, path, filename) {
 		if (err)
 			return NotFound(res)
-		var _exec = function() {
+		var waitEventName = qs['_wait']
+		var f = function() {
+			//////////////////////////////////
+			if (waitEventName)
+				root.emitter.removeListener(waitEventName, f)
+			//////////////////////////////////
 			var exec = ExecuteFile.bind(this, req, res, path, filename, env)
 			if (IsMultipart(req))
 				HandleMultipart(req, res, env, exec)
@@ -450,22 +455,20 @@ var SERVER_HANDLER = function(req, res) {
 				exec()
 		}
 		// IMPLEMENT _wait WEB INTERRUPT
-		if (qs['_wait']) {
-			var eventName = qs['_wait'].substr(0,22)
-			root.emitter.on(eventName, _exec)
+		if (waitEventName) {
+			root.emitter.on(waitEventName.substr(0,22), f)
 			req.on('close', function() {
-				root.emitter.removeListener(eventName, _exec)
+				root.emitter.removeListener(waitEventName, f)
 			})
 		} else {
-			_exec()
+			f()
 		}
 	})
 	//////////////////////////////////
 	// IMPLEMENT _notify WEB INTERRUPT
 	res.on('finish', function() {
-		if (qs['_notify']) {
+		if (qs['_notify'])
 			root.emitter.emit(qs['_notify'].substr(0,22))
-		}
 	})
 	//////////////////////////////////
 	// console.log(root)
