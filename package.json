@@ -1,7 +1,7 @@
 {
 	"title": "XCGI",
 	"description": "Utility for serving HTTP requests.",
-	"version": "0.1",
+	"version": "0.1.0",
 	"author": {
 		"name": "Ivan Dustin Bilon",
 		"email": "ivan22.dust@gmail.com"
