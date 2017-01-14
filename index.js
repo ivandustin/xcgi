@@ -169,95 +169,81 @@ function ConsumeQueue() {
 		setTimeout(exec, 0) // SCHEDULE EXECUTION TO AVOID NESTED FUNCTION CALLS
 	}
 }
-function ExecuteFile(req, res, path, filename, env, root) {
-	if (filename != DEFAULT_SCRIPT) {
-		if (INSTANCE_COUNT >= CONFIG.maxInstances) {
-			QUEUE.push(ExecuteFile.bind(this, req, res, path, filename, env, root))
-			// console.log('DEFER', INSTANCE_COUNT, QUEUE.length)
-			return
-		}
-		INSTANCE_COUNT++ // INCREMENT ON ACCEPT
-		// console.log('ACCEPTED', INSTANCE_COUNT, QUEUE.length)
+function ExecuteFile(req, res, path, filename, env) {
+	if (INSTANCE_COUNT >= CONFIG.maxInstances) {
+		QUEUE.push(ExecuteFile.bind(this, req, res, path, filename, env))
+		// console.log('DEFER', INSTANCE_COUNT, QUEUE.length)
+		return
 	}
-	fs.exists(path + '/' + filename, function(exists) {
-		if (exists) {
-			var buffer 		= ""
-			var infertype 	= false
-			var proc 		= null
-			try {
-				proc = spawn(SHELL, ['-c', filename], {
-					cwd: path,
-					env: env
-				})
-			} catch(e) {
-				console.log('SPAWN ERROR:', e.message)
-				req.destroy()
-				return false
+	INSTANCE_COUNT++ // INCREMENT ON ACCEPT
+	// console.log('ACCEPTED', INSTANCE_COUNT, QUEUE.length)
+	var buffer 		= ""
+	var infertype 	= false
+	var proc 		= null
+	try {
+		proc = spawn(SHELL, ['-c', filename], {
+			cwd: path,
+			env: env
+		})
+	} catch(e) {
+		console.log('SPAWN ERROR:', e.message)
+		req.destroy()
+		return false
+	}
+	proc.stdout.on('data', function(data) {
+		if (!res.finished) {
+			// AUTOMATICALLY INFER CONTENT TYPE
+			if (!infertype) {
+				if (data[0] == '{'.charCodeAt(0) || data[0] == '['.charCodeAt(0))
+					res.setHeader('Content-Type', 'application/json')
+				else if (data[0] == '<'.charCodeAt(0))
+					res.setHeader('Content-Type', 'text/html')
+				else
+					res.setHeader('Content-Type', 'text/plain')
+				infertype = true
 			}
-			proc.stdout.on('data', function(data) {
-				if (!res.finished) {
-					// AUTOMATICALLY INFER CONTENT TYPE
-					if (!infertype) {
-						if (data[0] == '{'.charCodeAt(0) || data[0] == '['.charCodeAt(0))
-							res.setHeader('Content-Type', 'application/json')
-						else if (data[0] == '<'.charCodeAt(0))
-							res.setHeader('Content-Type', 'text/html')
-						else
-							res.setHeader('Content-Type', 'text/plain')
-						infertype = true
-					}
-					buffer += data.toString() // BUFFER THE DATA
-				}
-			})
-			proc.stderr.on('data', function(error) {
-				console.error('STDERR PATH:', path, filename)
-				console.error('STDERR MSG:', error.toString())
-			})
-			proc.on('error', function(err) {
-				console.error('PROCESS ERROR:', err)
-			})
-			proc.on('exit', function(code, signal) {
-				INSTANCE_COUNT--
-				ConsumeQueue()
-				// In Windows, then child_process.kill() is called, the process
-				// is not really get killed. Therefore we try to kill using
-				// Unix 'kill' command.
-				if (code == null && signal == 'SIGTERM') {
-					// console.warn('WARNING:', 'Tried to kill process but failed. Using "kill" command instead.')
-					spawn('kill', ['--', '-' + proc.pid])
-				}
-				if (code != null && code < 256 && code >= 0 && !signal) {
-					if (SCRIPT_STATUS_CODES.length > code)
-						res.statusCode = SCRIPT_STATUS_CODES[code]
-					else {
-						res.statusCode = 500
-						console.warn('WARNING:', 'A process status code is invalid. StatusCode=' + code)
-					}
-					res.end(buffer)
-				} else {
-					req.destroy()
-					// console.error('ERROR:', 'A process possibly died. Request is destroyed.')
-				}
-			})
-			req.on('error', function() {
-				// console.error('REQUEST ERROR:', 'Script will be terminated.')
-				proc.kill() // KILL THE PROCESS WHEN THERE
-							// IS ERROR IN CONNECTION
-			})
-			req.on('aborted', function() {
-				// console.error('REQUEST ABORTED:', 'Script will be terminated.')
-				proc.kill() // KILL THE PROCESS WHEN CONNECTION
-							// IS ABORTED
-			})
-		} else {
-			if (filename != DEFAULT_SCRIPT) {
-				ExecuteFile(req, res, root, DEFAULT_SCRIPT, env, root)
-			} else {
-				INSTANCE_COUNT--
-				ConsumeQueue()
-				NotFound(res)
-			}
+			buffer += data.toString() // BUFFER THE DATA
 		}
+	})
+	proc.stderr.on('data', function(error) {
+		console.error('STDERR PATH:', path, filename)
+		console.error('STDERR MSG:', error.toString())
+	})
+	proc.on('error', function(err) {
+		console.error('PROCESS ERROR:', err)
+	})
+	proc.on('exit', function(code, signal) {
+		INSTANCE_COUNT--
+		ConsumeQueue()
+		// In Windows, then child_process.kill() is called, the process
+		// is not really get killed. Therefore we try to kill using
+		// Unix 'kill' command.
+		if (code == null && signal == 'SIGTERM') {
+			// console.warn('WARNING:', 'Tried to kill process but failed. Using "kill" command instead.')
+			spawn('kill', ['--', '-' + proc.pid])
+		}
+		if (code != null && code < 256 && code >= 0 && !signal) {
+			if (SCRIPT_STATUS_CODES.length > code)
+				res.statusCode = SCRIPT_STATUS_CODES[code]
+			else {
+				res.statusCode = 500
+				console.warn('WARNING:', 'A process status code is invalid. StatusCode=' + code)
+			}
+			res.end(buffer)
+		} else {
+			req.destroy()
+			// console.error('ERROR:', 'A process possibly died. Request is destroyed.')
+		}
+	})
+	req.on('error', function() {
+		// console.error('REQUEST ERROR:', 'Script will be terminated.')
+		proc.kill() // KILL THE PROCESS WHEN THERE
+					// IS ERROR IN CONNECTION
+	})
+	req.on('aborted', function() {
+		// console.error('REQUEST ABORTED:', 'Script will be terminated.')
+		proc.kill() // KILL THE PROCESS WHEN CONNECTION
+					// IS ABORTED
 	})
 }
 function GetRoots(path, cb) {
@@ -403,6 +389,20 @@ function HandleFormUrlEncoded(req, env, exec) {
 		exec()
 	})
 }
+// ChooseExecutable - check if the requested resource/script exists. If not,
+// 	check if the default handler/script is present. If not, return false.
+// cb(err:bool, path, filename)
+function ChooseExecutable(filepath, filename, rootpath, cb) {
+	fs.exists(filepath + '/' + filename, function(exists) {
+		if (exists)
+			return cb(false, filepath, filename)
+		fs.exists(rootpath + '/' + DEFAULT_SCRIPT, function(exists) {
+			if (exists)
+				return cb(false, rootpath, DEFAULT_SCRIPT)
+			return cb(true)
+		})
+	})
+}
 /////////////////////////////////
 var SERVER_HANDLER = function(req, res) {
 	// req.on('data', function(data) {
@@ -435,13 +435,17 @@ var SERVER_HANDLER = function(req, res) {
 	var rootpath	= path.join(SITES_PATH, root.dir)
 	var filename 	= GetFileName(req.method, objects)
 	var filepath 	= path.join(rootpath, objectname)
-	var exec 		= ExecuteFile.bind(this, req, res, filepath, filename, env, rootpath)
-	if (IsMultipart(req))
-		HandleMultipart(req, res, env, exec)
-	else if (IsFormUrlEncoded(req))
-		HandleFormUrlEncoded(req, env, exec)
-	else
-		exec()
+	ChooseExecutable(filepath, filename, rootpath, function(err, path, filename) {
+		if (err)
+			return NotFound(res)
+		var exec = ExecuteFile.bind(this, req, res, path, filename, env)
+		if (IsMultipart(req))
+			HandleMultipart(req, res, env, exec)
+		else if (IsFormUrlEncoded(req))
+			HandleFormUrlEncoded(req, env, exec)
+		else
+			exec()
+	})
 	// console.log(root)
 	// console.log(realurl)
 	// console.log(objects)
