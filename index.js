@@ -162,6 +162,13 @@ function CreateEnv(req, objects, rootdir) {
 	////////////////////////////////////
 	return env
 }
+function ConsumeQueue() {
+	if (INSTANCE_COUNT < CONFIG.maxInstances && QUEUE.length > 0) {
+		// console.log('PULL', INSTANCE_COUNT, QUEUE.length)
+		var exec = QUEUE.shift()
+		setTimeout(exec, 0) // SCHEDULE EXECUTION TO AVOID NESTED FUNCTION CALLS
+	}
+}
 function ExecuteFile(req, res, path, filename, env, root) {
 	if (filename != DEFAULT_SCRIPT) {
 		if (INSTANCE_COUNT >= CONFIG.maxInstances) {
@@ -212,8 +219,11 @@ function ExecuteFile(req, res, path, filename, env, root) {
 			proc.on('exit', function(code, signal) {
 				INSTANCE_COUNT--
 				ConsumeQueue()
+				// In Windows, then child_process.kill() is called, the process
+				// is not really get killed. Therefore we try to kill using
+				// Unix 'kill' command.
 				if (code == null && signal == 'SIGTERM') {
-					console.warn('WARNING:', 'Tried to kill process but failed. Using "kill" command instead.')
+					// console.warn('WARNING:', 'Tried to kill process but failed. Using "kill" command instead.')
 					spawn('kill', ['--', '-' + proc.pid])
 				}
 				if (code != null && code < 256 && code >= 0 && !signal) {
@@ -226,16 +236,16 @@ function ExecuteFile(req, res, path, filename, env, root) {
 					res.end(buffer)
 				} else {
 					req.destroy()
-					console.error('ERROR:', 'A process possibly died. Request is destroyed.')
+					// console.error('ERROR:', 'A process possibly died. Request is destroyed.')
 				}
 			})
 			req.on('error', function() {
-				console.error('REQUEST ERROR:', 'Script will be terminated.')
+				// console.error('REQUEST ERROR:', 'Script will be terminated.')
 				proc.kill() // KILL THE PROCESS WHEN THERE
 							// IS ERROR IN CONNECTION
 			})
 			req.on('aborted', function() {
-				console.error('REQUEST ABORTED:', 'Script will be terminated.')
+				// console.error('REQUEST ABORTED:', 'Script will be terminated.')
 				proc.kill() // KILL THE PROCESS WHEN CONNECTION
 							// IS ABORTED
 			})
@@ -392,13 +402,6 @@ function HandleFormUrlEncoded(req, env, exec) {
 			EnvValue(env, '_POST_', field, obj[field])
 		exec()
 	})
-}
-function ConsumeQueue() {
-	if (INSTANCE_COUNT < CONFIG.maxInstances && QUEUE.length > 0) {
-		// console.log('PULL', INSTANCE_COUNT, QUEUE.length)
-		var exec = QUEUE.shift()
-		setTimeout(exec, 0) // SCHEDULE EXECUTION TO AVOID NESTED FUNCTION CALLS
-	}
 }
 /////////////////////////////////
 var SERVER_HANDLER = function(req, res) {
