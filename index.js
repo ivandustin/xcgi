@@ -11,6 +11,7 @@ var spawn = require('child_process').spawn
 var fs = require('fs')
 var path = require('path')
 var multiparty = require('multiparty')
+var EventEmitter = require('events').EventEmitter
 /// HELP MESSAGE ////////////////
 function PRINTHELP() {
 	var msg = [
@@ -113,6 +114,7 @@ function Root() {
 	this.dir 		= null
 	this.domain 	= null
 	this.namespace 	= null
+	this.emitter 	= new EventEmitter()
 }
 /////////////////////////////////
 function EnvValue(env, prefix, name, a) {
@@ -132,12 +134,9 @@ function EnvValue(env, prefix, name, a) {
 		env[prefix + name] = a
 	}
 }
-function CreateEnv(req, objects, rootdir) {
+function CreateEnv(req, url, qs, objects, rootdir) {
 	var env = {}
 	////////////////////////////////////
-	var a = req.url.split('?')
-	var url = a[0]
-	var qs = querystring.parse(a[1])
 	env['REQUEST_URL'] = url
 	for(var key in qs)
 		EnvValue(env, 'QUERY_', key, qs[key])
@@ -429,8 +428,11 @@ var SERVER_HANDLER = function(req, res) {
 	var mime_type 	= IsAsset(realurl)
 	if (mime_type)
 		return SendAsset(mime_type, path.join(SITES_PATH, root.dir, realurl), res)
+	var a 			= req.url.split('?')
+	var url 		= a[0]
+	var qs 			= querystring.parse(a[1])
 	var objects 	= GetObjects(realurl)
-	var env 		= CreateEnv(req, objects, SITES_PATH + '/' + root.dir)
+	var env 		= CreateEnv(req, url, qs, objects, SITES_PATH + '/' + root.dir)
 	var objectname 	= objects.length > 0 ? objects[objects.length-1][0] : ''
 	var rootpath	= path.join(SITES_PATH, root.dir)
 	var filename 	= GetFileName(req.method, objects)
@@ -438,14 +440,34 @@ var SERVER_HANDLER = function(req, res) {
 	ChooseExecutable(filepath, filename, rootpath, function(err, path, filename) {
 		if (err)
 			return NotFound(res)
-		var exec = ExecuteFile.bind(this, req, res, path, filename, env)
-		if (IsMultipart(req))
-			HandleMultipart(req, res, env, exec)
-		else if (IsFormUrlEncoded(req))
-			HandleFormUrlEncoded(req, env, exec)
-		else
-			exec()
+		var _exec = function() {
+			var exec = ExecuteFile.bind(this, req, res, path, filename, env)
+			if (IsMultipart(req))
+				HandleMultipart(req, res, env, exec)
+			else if (IsFormUrlEncoded(req))
+				HandleFormUrlEncoded(req, env, exec)
+			else
+				exec()
+		}
+		// IMPLEMENT _wait WEB INTERRUPT
+		if (qs['_wait']) {
+			var eventName = qs['_wait'].substr(0,22)
+			root.emitter.on(eventName, _exec)
+			req.on('close', function() {
+				root.emitter.removeListener(eventName, _exec)
+			})
+		} else {
+			_exec()
+		}
 	})
+	//////////////////////////////////
+	// IMPLEMENT _notify WEB INTERRUPT
+	res.on('finish', function() {
+		if (qs['_notify']) {
+			root.emitter.emit(qs['_notify'].substr(0,22))
+		}
+	})
+	//////////////////////////////////
 	// console.log(root)
 	// console.log(realurl)
 	// console.log(objects)
