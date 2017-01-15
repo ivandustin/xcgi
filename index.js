@@ -420,6 +420,8 @@ var SERVER_HANDLER = function(req, res) {
 	// res.end('404 not found')
 	// return
 	//////////////////////////////////////////
+	res.setHeader('x-powered-by', 'XCGI')
+	//////////////////////////////////////////
 	req.on('error', function(err) {
 		console.log('REQUEST ERROR:', err)
 	})
