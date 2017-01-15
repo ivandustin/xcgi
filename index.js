@@ -32,6 +32,7 @@ var SITES_PATH = '.'
 var PORT = 80
 var QUEUE = []
 var INSTANCE_COUNT = 0
+var PGIDS = {}
 /// CONFIGURE ///////////////////
 var CONFIG = {
 	http: true,
@@ -182,13 +183,20 @@ function ExecuteFile(req, res, path, filename, env) {
 	try {
 		proc = spawn(SHELL, ['-c', filename], {
 			cwd: path,
-			env: env
+			env: env,
+			detached: true
 		})
 	} catch(e) {
 		console.log('SPAWN ERROR:', e.message)
 		req.destroy()
 		return false
 	}
+	///////////////////////////////////////////
+	// SAVE PROCESS ID SINCE WE DETACHED IT. MARK IT AS RUNNING = 1.
+	// KILL MARKED AS DEAD = 0 UPON PROCESS'S EXIT EVENT.
+	// DO NOT APPLY -PID WHEN SAVING TO OBJECT SINCE NEGATIVE VALUE IS SLOW.
+	PGIDS[proc.pid] = 1
+	///////////////////////////////////////////
 	proc.stdout.on('data', function(data) {
 		if (!res.finished) {
 			// AUTOMATICALLY INFER CONTENT TYPE
@@ -212,15 +220,12 @@ function ExecuteFile(req, res, path, filename, env) {
 		console.error('PROCESS ERROR:', err)
 	})
 	proc.on('exit', function(code, signal) {
+		/////////////////////////////
 		INSTANCE_COUNT--
 		ConsumeQueue()
-		// In Windows, then child_process.kill() is called, the process
-		// is not really get killed. Therefore we try to kill using
-		// Unix 'kill' command.
-		if (code == null && signal == 'SIGTERM') {
-			// console.warn('WARNING:', 'Tried to kill process but failed. Using "kill" command instead.')
-			spawn('kill', ['--', '-' + proc.pid])
-		}
+		// INVALIDATE PGID //////////
+		PGIDS[proc.pid] = 0
+		/////////////////////////////
 		if (code != null && code < 256 && code >= 0 && !signal) {
 			if (SCRIPT_STATUS_CODES.length > code)
 				res.statusCode = SCRIPT_STATUS_CODES[code]
@@ -236,13 +241,11 @@ function ExecuteFile(req, res, path, filename, env) {
 	})
 	req.on('error', function() {
 		// console.error('REQUEST ERROR:', 'Script will be terminated.')
-		proc.kill() // KILL THE PROCESS WHEN THERE
-					// IS ERROR IN CONNECTION
+		process.kill(-proc.pid)
 	})
 	req.on('aborted', function() {
 		// console.error('REQUEST ABORTED:', 'Script will be terminated.')
-		proc.kill() // KILL THE PROCESS WHEN CONNECTION
-					// IS ABORTED
+		process.kill(-proc.pid)
 	})
 }
 function GetRoots(path, cb) {
@@ -416,11 +419,11 @@ var SERVER_HANDLER = function(req, res) {
 	// createProcess(res, env)
 	// res.end('404 not found')
 	// return
-	//////////////////////////////////
+	//////////////////////////////////////////
 	req.on('error', function(err) {
 		console.log('REQUEST ERROR:', err)
 	})
-	//////////////////////////////////
+	//////////////////////////////////////////
 	var root 		= FindRoot(req.headers.host, req.url, ROOTS)
 	if (!root)
 		return NotFound(res)
@@ -441,8 +444,8 @@ var SERVER_HANDLER = function(req, res) {
 		if (err)
 			return NotFound(res)
 		var waitEventName = qs['_wait']
+		//////////////////////////////////////
 		var f = function() {
-			//////////////////////////////////
 			if (waitEventName)
 				root.emitter.removeListener(waitEventName, f)
 			//////////////////////////////////
@@ -454,7 +457,7 @@ var SERVER_HANDLER = function(req, res) {
 			else
 				exec()
 		}
-		// IMPLEMENT _wait WEB INTERRUPT
+		// IMPLEMENT _wait WEB INTERRUPT /////
 		if (waitEventName) {
 			root.emitter.on(waitEventName.substr(0,22), f)
 			req.on('close', function() {
@@ -464,13 +467,12 @@ var SERVER_HANDLER = function(req, res) {
 			f()
 		}
 	})
-	//////////////////////////////////
-	// IMPLEMENT _notify WEB INTERRUPT
+	// IMPLEMENT _notify WEB INTERRUPT ///////
 	res.on('finish', function() {
 		if (qs['_notify'])
 			root.emitter.emit(qs['_notify'].substr(0,22))
 	})
-	//////////////////////////////////
+	//////////////////////////////////////////
 	// console.log(root)
 	// console.log(realurl)
 	// console.log(objects)
@@ -525,7 +527,17 @@ fs.watch(SITES_PATH, function(type, filename) {
 			console.log('Site found:', roots[i].dir)
 	})
 })
-// HELPERS/UTILITIES ///////////////////////////////////
+// CLEANUP ////////////////////////////
+process.on('SIGTERM', process.exit)
+process.on('SIGINT', process.exit)
+process.on('SIGHUP', process.exit)
+process.on('exit', function() {
+	// KILL ALL SPAWNED PROCESS
+	for(var pgid in PGIDS)
+		if (PGIDS[pgid] == 1)
+			process.kill(-pgid)
+})
+// HELPERS/UTILITIES //////////////////
 function getopt(argv, handle) {
 	for(var i=0; i<argv.length; i++) {
 		var arg = argv[i]
