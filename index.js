@@ -8,6 +8,7 @@ var http = require('http')
 var https = require('https')
 var querystring = require('querystring')
 var spawn = require('child_process').spawn
+var execFileSync = require('child_process').execFileSync
 var fs = require('fs')
 var path = require('path')
 var multiparty = require('multiparty')
@@ -33,6 +34,10 @@ var PORT = 80
 var QUEUE = []
 var INSTANCE_COUNT = 0
 var PGIDS = {}
+// IN WINDOWS, WE CAN KILL PGID (USING KILL PROGRAM) WITHOUT
+// DETACHING THE PROCESS. IN UNIX, WE NEED TO DETACH THE PROCESS
+// SO THAT WE CAN KILL PGID USING `process.kill(-pgid)` FUNCTION.
+var DETACH_PROCESS = process.platform == 'win32' ? false : true
 /// CONFIGURE ///////////////////
 var CONFIG = {
 	http: true,
@@ -184,7 +189,7 @@ function ExecuteFile(req, res, path, filename, env) {
 		proc = spawn(SHELL, [filename], {
 			cwd: path,
 			env: env,
-			detached: true
+			detached: DETACH_PROCESS
 		})
 	} catch(e) {
 		console.log('SPAWN ERROR:', e.message)
@@ -241,11 +246,11 @@ function ExecuteFile(req, res, path, filename, env) {
 	})
 	req.on('error', function() {
 		// console.error('REQUEST ERROR:', 'Script will be terminated.')
-		process.kill(-proc.pid)
+		KillProcess(-proc.pid)
 	})
 	req.on('aborted', function() {
 		// console.error('REQUEST ABORTED:', 'Script will be terminated.')
-		process.kill(-proc.pid)
+		KillProcess(-proc.pid)
 	})
 }
 function GetRoots(path, cb) {
@@ -537,7 +542,7 @@ process.on('exit', function() {
 	// KILL ALL SPAWNED PROCESS
 	for(var pgid in PGIDS)
 		if (PGIDS[pgid] == 1)
-			process.kill(-pgid)
+			try { KillProcessSync(-pgid) } catch(e) {}
 })
 // HELPERS/UTILITIES //////////////////
 function getopt(argv, handle) {
@@ -558,4 +563,13 @@ function getopt(argv, handle) {
 		var hasValue = handle(opt, value)
 		if (hasValue) i++ // skip the next argument
 	}
+}
+function KillProcess(pid) {
+	if (process.platform == 'win32')
+		spawn('kill', ['--', pid])
+	else
+		process.kill(pid)
+}
+function KillProcessSync(pid) {
+	execFileSync('kill', ['--', pid])
 }
