@@ -181,7 +181,7 @@ function ExecuteFile(req, res, path, filename, env) {
 	var infertype 	= false
 	var proc 		= null
 	try {
-		proc = spawn(SHELL, ['-c', filename], {
+		proc = spawn(SHELL, [filename], {
 			cwd: path,
 			env: env,
 			detached: true
