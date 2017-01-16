@@ -116,6 +116,8 @@ var ASSET_TYPES = {
 var DEFAULT_SCRIPT = 'default.sh'
 var SCRIPT_STATUS_CODES = [200, 400, 404]
 /////////////////////////////////
+var KillProcess = GetProcessKiller()
+/////////////////////////////////
 function Root() {
 	this.dir 		= null
 	this.domain 	= null
@@ -539,10 +541,13 @@ process.on('SIGTERM', process.exit)
 process.on('SIGINT', process.exit)
 process.on('SIGHUP', process.exit)
 process.on('exit', function() {
-	// KILL ALL SPAWNED PROCESS
-	for(var pgid in PGIDS)
-		if (PGIDS[pgid] == 1)
-			try { KillProcessSync(-pgid) } catch(e) {}
+	try {
+		var kill = GetProcessKiller(true)
+		// KILL ALL SPAWNED PROCESS
+		for(var pgid in PGIDS)
+			if (PGIDS[pgid] == 1)
+				kill(-pgid)
+	} catch(e) {}
 })
 // HELPERS/UTILITIES //////////////////
 function getopt(argv, handle) {
@@ -564,12 +569,17 @@ function getopt(argv, handle) {
 		if (hasValue) i++ // skip the next argument
 	}
 }
-function KillProcess(pid) {
-	if (process.platform == 'win32')
-		spawn('kill', ['--', pid])
-	else
-		process.kill(pid)
+function KillProcessWin32(pid) {
+	spawn('kill', ['--', pid])
 }
-function KillProcessSync(pid) {
+function KillProcessSyncWin32(pid) {
 	execFileSync('kill', ['--', pid])
+}
+function GetProcessKiller(sync) {
+	if (process.platform == 'win32')
+		if (sync)
+			return KillProcessSyncWin32
+		else
+			return KillProcessWin32
+	return process.kill
 }
