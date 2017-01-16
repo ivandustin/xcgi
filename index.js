@@ -116,7 +116,8 @@ var ASSET_TYPES = {
 var DEFAULT_SCRIPT = 'default.sh'
 var SCRIPT_STATUS_CODES = [200, 400, 404]
 /////////////////////////////////
-var KillProcess = GetProcessKiller()
+var KillProcess 	= GetProcessKiller()
+var KillProcessSync = GetProcessKiller(true)
 /////////////////////////////////
 function Root() {
 	this.dir 		= null
@@ -542,11 +543,10 @@ process.on('SIGINT', process.exit)
 process.on('SIGHUP', process.exit)
 process.on('exit', function() {
 	try {
-		var kill = GetProcessKiller(true)
 		// KILL ALL SPAWNED PROCESS
 		for(var pgid in PGIDS)
 			if (PGIDS[pgid] == 1)
-				kill(-pgid)
+				KillProcessSync(-pgid)
 	} catch(e) {}
 })
 // HELPERS/UTILITIES //////////////////
