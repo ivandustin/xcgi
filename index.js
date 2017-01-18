@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /*!
  * XCGI
  * Copyright (c) 2017-2018 Ivan Dustin Bilon

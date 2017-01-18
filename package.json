@@ -6,12 +6,13 @@
 		"name": "Ivan Dustin Bilon",
 		"email": "ivan22.dust@gmail.com"
 	},
+	"repository": "git://github.com/ivandustin/xcgi.git",
 	"dependencies": {
 		"multiparty": "4.1"
 	},
 	"license": "AGPLv3",
 	"preferGlobal": true,
 	"bin": {
-		"xcgi": "index.js"
+		"xcgi": "./index.js"
 	}
 }
