@@ -467,7 +467,7 @@ var SERVER_HANDLER = function(req, res) {
 			else
 				exec()
 		}
-		// IMPLEMENT _wait WEB INTERRUPT /////
+		// IMPLEMENT _wait /////
 		if (waitEventName) {
 			root.emitter.on(waitEventName.substr(0,22), f)
 			req.on('close', function() {
@@ -477,9 +477,9 @@ var SERVER_HANDLER = function(req, res) {
 			f()
 		}
 	})
-	// IMPLEMENT _notify WEB INTERRUPT ///////
+	// IMPLEMENT _notify ///////
 	res.on('finish', function() {
-		if (qs['_notify'])
+		if (res.statusCode >= 200 && res.statusCode < 300 && qs['_notify'])
 			root.emitter.emit(qs['_notify'].substr(0,22))
 	})
 	//////////////////////////////////////////
