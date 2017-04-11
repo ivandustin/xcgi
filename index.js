@@ -169,6 +169,9 @@ function CreateEnv(req, url, qs, objects, rootdir) {
 	env['STATUS_BADREQUEST'] 	= 1
 	env['STATUS_NOTFOUND'] 	 	= 2
 	////////////////////////////////////
+	// INHERITS FROM PROCESS.ENV
+	env['PATH'] = process.env['PATH']
+	////////////////////////////////////
 	return env
 }
 function ConsumeQueue() {
