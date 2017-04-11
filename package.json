@@ -1,5 +1,5 @@
 {
-	"name": "XCGI",
+	"name": "xcgi",
 	"description": "Utility for serving HTTP requests.",
 	"version": "0.1.0",
 	"author": {
