@@ -522,6 +522,7 @@ var LISTEN_HANDLER = function(port) {
             console.log('Welcome to XCGI!')
             console.log('Sites path at', SITES_PATH)
             console.log('Max instances is', CONFIG.maxInstances)
+            console.log('Shell used is', SHELL)
             IS_GREET = true
         }
         console.log('Online at port', port)
