@@ -8,10 +8,19 @@ XCGI is not a direct implementation of CGI, hence the prefix `X`. But its
 interface resembles CGI. It uses `bash` as the main program in serving HTTP 
 requests. It implements RESTful interface as its core design.
 
+## Installation
+
+Clone this repository and do:
+
+```
+cd xcgi
+npm install -g
+```
+
 ## Dependencies
 
 All you need is `nodejs` and `bash`. Therefore in Windows you have to install
-`MSys` to have full Unix environment.
+`MSys/MinGW` or `cygwin` to have Unix environment.
 
 ## Hello World Example
 
