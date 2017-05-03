@@ -125,6 +125,7 @@ var ASSET_TYPES = [
     '.png',
     '.gif',
     '.svg',
+    '.ico',
     // AUDO VIDEO
     '.wav',
     '.webm',
