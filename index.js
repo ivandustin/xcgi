@@ -7,6 +7,7 @@
 var os = require('os')
 var http = require('http')
 var https = require('https')
+var serveStatic = require('serve-static')
 var querystring = require('querystring')
 var spawn = require('child_process').spawn
 var execFileSync = require('child_process').execFileSync
@@ -130,6 +131,7 @@ function Root() {
     this.domain     = null
     this.namespace  = null
     this.emitter    = new EventEmitter()
+    this.serveStatic = null
 }
 /////////////////////////////////
 function EnvValue(env, prefix, name, a) {
@@ -282,6 +284,7 @@ function GetRoots(path, cb) {
             root.dir = files[i]
             root.domain = a.shift()
             root.namespace = '/' + a.join('/')
+            root.serveStatic = serveStatic(SITES_PATH + '/' + root.dir)
             roots.push(root)
         }
         cb(roots)
@@ -447,9 +450,9 @@ var SERVER_HANDLER = function(req, res) {
     if (!root)
         return NotFound(res)
     var realurl     = GetRealUrl(req.url, root)
-    var mime_type   = IsAsset(realurl)
-    if (mime_type)
-        return SendAsset(mime_type, path.join(SITES_PATH, root.dir, realurl), res)
+    // var mime_type   = IsAsset(realurl)
+    // if (mime_type)
+    //     return SendAsset(mime_type, path.join(SITES_PATH, root.dir, realurl), res)
     var a           = req.url.split('?')
     var url         = a[0]
     var qs          = querystring.parse(a[1])
@@ -460,8 +463,16 @@ var SERVER_HANDLER = function(req, res) {
     var filename    = GetFileName(req.method, objects)
     var filepath    = path.join(rootpath, objectname)
     ChooseExecutable(filepath, filename, rootpath, function(err, path, filename) {
-        if (err)
-            return NotFound(res)
+        if (err) {
+            // IF SCRIPT IS NOT FOUND, TRY TO SERVE STATIC CONTENT.
+            // MODIFY URL TO BE THE REAL URL SO THAT SERVE STATIC CAN WORK CORRECTLY.
+            req.url = realurl
+            return root.serveStatic(req, res, function(err) {
+                if (!err)
+                    return NotFound(res)
+                res.end()
+            })
+        }
         var waitEventName = qs['_wait']
         //////////////////////////////////////
         var f = function() {
