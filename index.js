@@ -111,15 +111,30 @@ if (CONFIG.https) {
 var SHELL = CONFIG.shell
 var ROOTS = null
 var ROOTDIR_DELIMITER = '_'
-var ASSET_TYPES = {
-    '.js': 'application/javascript',
-    '.json': 'application/json',
-    '.css': 'text/css',
-    '.jpg': 'image/jpeg',
-    '.png': 'image/png',
-    '.gif': 'image/gif',
-    '.pdf': 'application/pdf'
-}
+var ASSET_TYPES = [
+    // DOCUMENTS
+    '.htm',
+    '.html',
+    '.txt',
+    '.js',
+    '.json',
+    '.pdf',
+    '.css',
+    // IMAGES
+    '.jpg',
+    '.png',
+    '.gif',
+    '.svg',
+    // AUDO VIDEO
+    '.wav',
+    '.webm',
+    '.ogg',
+    '.mp3',
+    '.mp4',
+    '.mpeg',
+    // MISC
+    '.map'
+]
 var DEFAULT_SCRIPT = 'default.sh'
 var SCRIPT_STATUS_CODES = [200, 400, 404]
 /////////////////////////////////
@@ -347,24 +362,11 @@ function NotFound(res) {
     res.end('404 Not Found')
 }
 function IsAsset(url) {
-    var e = url.substr(-4)
-    for(var ext in ASSET_TYPES)
-        if (e.indexOf(ext) != -1)
-            return ASSET_TYPES[ext]
+    var e = url.substr(-5)
+    for(var i=0;i<ASSET_TYPES.length;i++)
+        if (e.indexOf(ASSET_TYPES[i]) != -1)
+            return true
     return false
-}
-function SendAsset(mime_type, filepath, response) {
-    response.setHeader('Content-Type', mime_type)
-    var rstream = fs.createReadStream(filepath)
-    rstream.on('data', function(buff) {
-        response.write(buff)
-    })
-    rstream.on('close', function() {
-        response.end()
-    })
-    rstream.on('error', function() {
-        NotFound(response)
-    })
 }
 function IsMultipart(req) {
     if (req.headers['content-type'] &&
@@ -450,9 +452,15 @@ var SERVER_HANDLER = function(req, res) {
     if (!root)
         return NotFound(res)
     var realurl     = GetRealUrl(req.url, root)
-    // var mime_type   = IsAsset(realurl)
-    // if (mime_type)
-    //     return SendAsset(mime_type, path.join(SITES_PATH, root.dir, realurl), res)
+    if (IsAsset(realurl)) {
+        // MODIFY URL TO BE THE REAL URL SO THAT SERVE STATIC CAN WORK CORRECTLY.
+        req.url = realurl
+        return root.serveStatic(req, res, function(err) {
+            if (!err)
+                return NotFound(res)
+            res.end()
+        })
+    }
     var a           = req.url.split('?')
     var url         = a[0]
     var qs          = querystring.parse(a[1])
@@ -463,16 +471,8 @@ var SERVER_HANDLER = function(req, res) {
     var filename    = GetFileName(req.method, objects)
     var filepath    = path.join(rootpath, objectname)
     ChooseExecutable(filepath, filename, rootpath, function(err, path, filename) {
-        if (err) {
-            // IF SCRIPT IS NOT FOUND, TRY TO SERVE STATIC CONTENT.
-            // MODIFY URL TO BE THE REAL URL SO THAT SERVE STATIC CAN WORK CORRECTLY.
-            req.url = realurl
-            return root.serveStatic(req, res, function(err) {
-                if (!err)
-                    return NotFound(res)
-                res.end()
-            })
-        }
+        if (err)
+            return NotFound(res)
         var waitEventName = qs['_wait']
         //////////////////////////////////////
         var f = function() {
