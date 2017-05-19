@@ -133,6 +133,13 @@ var ASSET_TYPES = [
     '.mp3',
     '.mp4',
     '.mpeg',
+    // FONTS
+    '.eot',
+    '.otf',
+    '.ttf',
+    '.woff',
+    '.woff2',
+    '.sfnt',
     // MISC
     '.map'
 ]
