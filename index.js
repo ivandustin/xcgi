@@ -159,14 +159,19 @@ function Root() {
 /////////////////////////////////
 function EnvValue(env, prefix, name, a) {
     name = name.toUpperCase()
-    if (Array.isArray(a)) {
+    var hasBrackets = name.length > 2 && name.substr(-2) == '[]' ? true : false
+    if (hasBrackets)
+        name = name.substr(0, name.length-2)
+    if (hasBrackets && !Array.isArray(a)) {
+        env[prefix + name] = encodeURI(a)
+    } else if (Array.isArray(a)) {
         if (a.length == 0)
             return
-        if (name.length > 2 && name.substr(-2) == '[]') {
+        if (hasBrackets) {
             var values = []
             for(var i=0;i<a.length;i++)
                 values.push(encodeURI(a[i]))
-            env[prefix + name.substr(0, name.length-2)] = values.join(' ')
+            env[prefix + name] = values.join(' ')
         } else {
             env[prefix + name] = a[0]
         }
