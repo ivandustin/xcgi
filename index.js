@@ -249,11 +249,11 @@ function ExecuteFile(req, res, path, filename, env) {
             // AUTOMATICALLY INFER CONTENT TYPE
             if (!infertype) {
                 if (data[0] == '{'.charCodeAt(0) || data[0] == '['.charCodeAt(0))
-                    res.setHeader('Content-Type', 'application/json')
+                    res.setHeader('Content-Type', 'application/json; charset=utf-8')
                 else if (data[0] == '<'.charCodeAt(0))
-                    res.setHeader('Content-Type', 'text/html')
+                    res.setHeader('Content-Type', 'text/html; charset=utf-8')
                 else
-                    res.setHeader('Content-Type', 'text/plain')
+                    res.setHeader('Content-Type', 'text/plain; charset=utf-8')
                 infertype = true
             }
             buffer += data.toString() // BUFFER THE DATA
