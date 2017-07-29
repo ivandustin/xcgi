@@ -120,6 +120,8 @@ var ASSET_TYPES = [
     '.json',
     '.pdf',
     '.css',
+    '.csv',
+    '.tsv',
     // IMAGES
     '.jpg',
     '.png',
