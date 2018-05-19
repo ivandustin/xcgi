@@ -226,7 +226,7 @@ function ExecuteFile(req, res, path, filename, env) {
     }
     INSTANCE_COUNT++ // INCREMENT ON ACCEPT
     // console.log('ACCEPTED', INSTANCE_COUNT, QUEUE.length)
-    var buffer      = ""
+    var buffer      = []
     var infertype   = false
     var proc        = null
     try {
@@ -258,7 +258,7 @@ function ExecuteFile(req, res, path, filename, env) {
                     res.setHeader('Content-Type', 'text/plain; charset=utf-8')
                 infertype = true
             }
-            buffer += data.toString() // BUFFER THE DATA
+            buffer.push(data) // BUFFER THE DATA
         }
     })
     proc.stderr.on('data', function(error) {
@@ -282,7 +282,7 @@ function ExecuteFile(req, res, path, filename, env) {
                 res.statusCode = 500
                 console.warn('WARNING:', 'A process status code is invalid. StatusCode=' + code)
             }
-            res.end(buffer)
+            res.end(Buffer.concat(buffer))
         } else {
             req.destroy()
             // console.error('ERROR:', 'A process possibly died. Request is destroyed.')
