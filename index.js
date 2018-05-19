@@ -503,7 +503,7 @@ var SERVER_HANDLER = function(req, res) {
     ChooseExecutable(filepath, filename, rootpath, function(err, path, filename) {
         if (err)
             return NotFound(res)
-        var waitEventName = qs['_wait']
+        var waitEventName = qs['_wait'] ? qs['_wait'].substr(0,22) : null
         //////////////////////////////////////
         var f = function() {
             if (waitEventName)
@@ -519,7 +519,7 @@ var SERVER_HANDLER = function(req, res) {
         }
         // IMPLEMENT _wait /////
         if (waitEventName) {
-            root.emitter.on(waitEventName.substr(0,22), f)
+            root.emitter.on(waitEventName, f)
             req.on('close', function() {
                 root.emitter.removeListener(waitEventName, f)
             })
