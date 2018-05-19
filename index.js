@@ -282,6 +282,7 @@ function ExecuteFile(req, res, path, filename, env) {
                 res.statusCode = 500
                 console.warn('WARNING:', 'A process status code is invalid. StatusCode=' + code)
             }
+            res.setHeader('Access-Control-Allow-Origin', '*') // ALLOW CORS ONLY FOR RESOURCE
             res.end(Buffer.concat(buffer))
         } else {
             req.destroy()
@@ -463,6 +464,20 @@ var SERVER_HANDLER = function(req, res) {
         console.log('REQUEST ERROR:', err)
     })
     //////////////////////////////////////////
+    // HANDLE CORS
+    if (req.method === 'OPTIONS') {
+        var headers = {}
+        // IE8 does not allow domains to be specified, just the *
+        // headers["Access-Control-Allow-Origin"] = req.headers.origin;
+        headers["Access-Control-Allow-Origin"] = "*"
+        headers["Access-Control-Allow-Methods"] = "POST, GET, PUT, DELETE, OPTIONS"
+        headers["Access-Control-Allow-Credentials"] = false
+        headers["Access-Control-Max-Age"] = '86400' // 24 hours
+        headers["Access-Control-Allow-Headers"] = "X-Requested-With, X-HTTP-Method-Override, Content-Type, Accept"
+        res.writeHead(200, headers)
+        return res.end()
+    }
+    //////////////////////////////////////////
     var root        = FindRoot(req.headers.host, req.url, ROOTS)
     if (!root)
         return NotFound(res)
@@ -514,7 +529,8 @@ var SERVER_HANDLER = function(req, res) {
     })
     // IMPLEMENT _notify ///////
     res.on('finish', function() {
-        if (res.statusCode >= 200 && res.statusCode < 300 && qs['_notify'])
+        if (~['POST', 'PUT', 'DELETE'].indexOf(req.method) &&
+            res.statusCode >= 200 && res.statusCode < 300 && qs['_notify'])
             root.emitter.emit(qs['_notify'].substr(0,22))
     })
     //////////////////////////////////////////
