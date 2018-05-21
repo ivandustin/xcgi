@@ -128,7 +128,7 @@ var ASSET_TYPES = [
     '.gif',
     '.svg',
     '.ico',
-    // AUDO VIDEO
+    // AUDIO VIDEO
     '.wav',
     '.webm',
     '.ogg',
@@ -142,8 +142,16 @@ var ASSET_TYPES = [
     '.woff',
     '.woff2',
     '.sfnt',
+    // ARCHIVES
+    '.zip',
+    '.tar',
+    '.gz',
+    '.tgz',
+    '.7z',
+    '.rar',
     // MISC
-    '.map'
+    '.map',
+    '.msi'
 ]
 var DEFAULT_SCRIPT = 'default.sh'
 var SCRIPT_STATUS_CODES = [200, 400, 404]
