@@ -163,8 +163,9 @@ function Root() {
     this.dir        = null
     this.domain     = null
     this.namespace  = null
-    this.emitter    = new EventEmitter()
+    this.emitter    = new EventEmitter
     this.serveStatic = null
+    this.urlevent   = {}
 }
 /////////////////////////////////
 function EnvValue(env, prefix, name, a) {
@@ -451,6 +452,10 @@ function ChooseExecutable(filepath, filename, rootpath, cb) {
         })
     })
 }
+function UrlEvent() {
+    this.lastnotify = 0  // LAST URL NOTIFY EVENT
+    this.lastwait   = {} // WAIT[ID] = LAST WAITED (new Date)
+}
 /////////////////////////////////
 var SERVER_HANDLER = function(req, res) {
     // req.on('data', function(data) {
@@ -511,11 +516,14 @@ var SERVER_HANDLER = function(req, res) {
     ChooseExecutable(filepath, filename, rootpath, function(err, path, filename) {
         if (err)
             return NotFound(res)
-        var waitEventName = qs['_wait'] ? qs['_wait'].substr(0,22) : null
+        //////////////////////////////////////
+        var waitid = qs['_wait'] ? qs['_wait'].substr(0,22) : null
         //////////////////////////////////////
         var f = function() {
-            if (waitEventName)
-                root.emitter.removeListener(waitEventName, f)
+            if (waitid) {
+                root.emitter.removeListener(url, f)
+                root.urlevent[url].lastwait[waitid] = new Date
+            }
             //////////////////////////////////
             var exec = ExecuteFile.bind(this, req, res, path, filename, env)
             if (IsMultipart(req))
@@ -526,22 +534,33 @@ var SERVER_HANDLER = function(req, res) {
                 exec()
         }
         // IMPLEMENT _wait /////
-        if (waitEventName) {
-            root.emitter.on(waitEventName, f)
-            req.on('close', function() {
-                root.emitter.removeListener(waitEventName, f)
-            })
+        if (waitid) {
+            if (!root.urlevent[url])
+                root.urlevent[url] = new UrlEvent
+            ///////////////////////
+            var lastnotify  = root.urlevent[url].lastnotify
+            var lastwait    = root.urlevent[url].lastwait[waitid]
+            if (lastwait && (lastnotify == 0 || lastwait >= lastnotify)) {
+                root.emitter.on(url, f)
+                req.on('close', function() {
+                    root.emitter.removeListener(url, f)
+                })
+            } else {
+                f()
+            }
         } else {
             f()
         }
+        ///////////////////////
+        res.on('finish', function() {
+            if (root.urlevent[url] &&
+                ~['POST', 'PUT', 'DELETE'].indexOf(req.method) &&
+                res.statusCode >= 200 && res.statusCode < 300) {
+                root.urlevent[url].lastnotify = new Date
+                root.emitter.emit(url)
+            }
+        })
     })
-    // IMPLEMENT _notify ///////
-    res.on('finish', function() {
-        if (~['POST', 'PUT', 'DELETE'].indexOf(req.method) &&
-            res.statusCode >= 200 && res.statusCode < 300 && qs['_notify'])
-            root.emitter.emit(qs['_notify'].substr(0,22))
-    })
-    //////////////////////////////////////////
     // console.log(root)
     // console.log(realurl)
     // console.log(objects)
