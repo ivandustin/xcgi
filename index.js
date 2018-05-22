@@ -165,7 +165,8 @@ function Root() {
     this.namespace  = null
     this.emitter    = new EventEmitter
     this.serveStatic = null
-    this.urlevent   = {}
+    this.lastnotify = {}
+    this.lastwait   = {}
 }
 /////////////////////////////////
 function EnvValue(env, prefix, name, a) {
@@ -458,10 +459,6 @@ function ChooseExecutable(filepath, filename, rootpath, cb) {
         })
     })
 }
-function UrlEvent() {
-    this.lastnotify = 0  // LAST URL NOTIFY EVENT
-    this.lastwait   = {} // WAIT[ID] = LAST WAITED (new Date)
-}
 /////////////////////////////////
 var SERVER_HANDLER = function(req, res) {
     // req.on('data', function(data) {
@@ -528,7 +525,7 @@ var SERVER_HANDLER = function(req, res) {
         var f = function() {
             if (waitid) {
                 root.emitter.removeListener(url, f)
-                root.urlevent[url].lastwait[waitid] = new Date
+                root.lastwait[waitid] = new Date
             }
             //////////////////////////////////
             var exec = ExecuteFile.bind(this, req, res, path, filename, env)
@@ -541,12 +538,12 @@ var SERVER_HANDLER = function(req, res) {
         }
         // IMPLEMENT _wait /////
         if (waitid) {
-            if (!root.urlevent[url])
-                root.urlevent[url] = new UrlEvent
+            if (root.lastnotify[url] === undefined)
+                root.lastnotify[url] = 0
             ///////////////////////
-            var lastnotify  = root.urlevent[url].lastnotify
-            var lastwait    = root.urlevent[url].lastwait[waitid]
-            if (lastwait && (lastnotify == 0 || lastwait >= lastnotify)) {
+            var lastnotify  = root.lastnotify[url]
+            var lastwait    = root.lastwait[waitid]
+            if (lastwait && (lastnotify === 0 || lastwait >= lastnotify)) {
                 root.emitter.on(url, f)
                 req.on('close', function() {
                     root.emitter.removeListener(url, f)
@@ -559,10 +556,10 @@ var SERVER_HANDLER = function(req, res) {
         }
         ///////////////////////
         res.on('finish', function() {
-            if (root.urlevent[url] &&
+            if (root.lastnotify[url] !== undefined &&
                 ~['POST', 'PUT', 'DELETE'].indexOf(req.method) &&
                 res.statusCode >= 200 && res.statusCode < 300) {
-                root.urlevent[url].lastnotify = new Date
+                root.lastnotify[url] = new Date
                 root.emitter.emit(url)
             }
         })
