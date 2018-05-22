@@ -20,10 +20,10 @@ function PRINTHELP() {
     var msg = [
         'xcgi <options...> <sites path>',
         'Options:',
-        '    -p <port>   Specify different port number. You have to choose',
-        '                either http or https only. Default is 80 and 443.',
-        '    -h          Http only.',
-        '    -s          Https only.',
+        '    -p <http port>:<https port>',
+        '                Specify different HTTP/HTTPS port number.',
+        '    -h          HTTP only. Turn off HTTPS.',
+        '    -s          HTTPS only. Turn off HTTP.',
         '    -r          Redirect http to https. Off by default.',
         '    -m <int>    Max instances of spawned process.',
         '    --shell <>  Set the default shell to be used. Default is bash.'
@@ -32,11 +32,12 @@ function PRINTHELP() {
         console.log(msg[i])
 }
 /////////////////////////////////
-var SITES_PATH = '.'
-var PORT = 80
-var QUEUE = []
-var INSTANCE_COUNT = 0
-var PGIDS = {}
+var SITES_PATH      = '.'
+var HTTP_PORT       = 80
+var HTTPS_PORT      = 443
+var QUEUE           = []
+var INSTANCE_COUNT  = 0
+var PGIDS           = {}
 // IN WINDOWS, WE CAN KILL PGID (USING KILL PROGRAM) WITHOUT
 // DETACHING THE PROCESS. IN UNIX, WE NEED TO DETACH THE PROCESS
 // SO THAT WE CAN KILL PGID USING `process.kill(-pgid)` FUNCTION.
@@ -56,7 +57,9 @@ var CONFIG = {
 getopt(process.argv.splice(2), function(option, value) {
     switch(option) {
         case 'p':
-            PORT = parseInt(value)
+            var ports  = value.split(':')
+            HTTP_PORT  = ports[0] ? parseInt(ports[0]) : HTTP_PORT
+            HTTPS_PORT = ports[1] ? parseInt(ports[1]) : HTTPS_PORT
             return true
         case 'h':
             CONFIG.http = true
@@ -582,7 +585,10 @@ var SERVER_HANDLER_REDIRECT = function(req, res) {
         console.log('REDIRECT REQUEST ERROR:', err)
     })
     res.statusCode = 302
-    res.setHeader('Location', 'https://' + req.headers.host + req.url)
+    var host = req.headers.host
+    if (HTTPS_PORT !== 443)
+        host = host.split(':')[0] + ':' + HTTPS_PORT
+    res.setHeader('Location', 'https://' + host + req.url)
     res.end('302 Moved')
 }
 var IS_GREET = false
@@ -602,6 +608,8 @@ var LISTEN_HANDLER = function(port) {
             console.log('Sites path at', SITES_PATH)
             console.log('Max instances is', CONFIG.maxInstances)
             console.log('Shell used is', SHELL)
+            console.log('HTTP port is', HTTP_PORT)
+            console.log('HTTPS port is', HTTPS_PORT)
             IS_GREET = true
         }
         console.log('Online at port', port)
@@ -609,14 +617,13 @@ var LISTEN_HANDLER = function(port) {
 }
 // MAIN ///////////////////////////////
 if (CONFIG.http && ! CONFIG.redirect) {
-    http.createServer(SERVER_HANDLER).listen(PORT, LISTEN_HANDLER(PORT))
+    http.createServer(SERVER_HANDLER).listen(HTTP_PORT, LISTEN_HANDLER(HTTP_PORT))
 }
 if (CONFIG.http && CONFIG.redirect) {
-    http.createServer(SERVER_HANDLER_REDIRECT).listen(PORT, LISTEN_HANDLER(PORT))
+    http.createServer(SERVER_HANDLER_REDIRECT).listen(HTTP_PORT, LISTEN_HANDLER(HTTP_PORT))
 }
 if (CONFIG.https) {
-    var port = PORT == 80 ? 443 : PORT
-    https.createServer(CONFIG.httpsOption, SERVER_HANDLER).listen(port, LISTEN_HANDLER(port))
+    https.createServer(CONFIG.httpsOption, SERVER_HANDLER).listen(HTTPS_PORT, LISTEN_HANDLER(HTTPS_PORT))
 }
 fs.watch(SITES_PATH, function(type, filename) {
     console.log('Reloading sites...')
