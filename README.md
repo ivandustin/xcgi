@@ -89,6 +89,19 @@ mv localhost_api _
 This means you can omit the `localhost` and just use `_`. Therefore 
 `localhost_api` is the same as `_api` folder name.
 
+## Request Methods
+
+`XCGI` handles basic RESTful API request methods, the `GET`, `POST`, `PUT`, and `DELETE`.
+Below are the list of handlers for each request method.
+
+```
+GET    /resource     => index.sh
+GET    /resource/id  => show.sh
+POST   /resource     => create.sh
+PUT    /resource/id  => update.sh
+DELETE /resource/id  => destroy.sh
+```
+
 ## Accessing Request Data
 
 Generally all request data is exported in environment variable. You may use
@@ -120,9 +133,26 @@ move it afterwards using `mv` program.
 
 You may access request headers using `$HTTP_<HEADER NAME>` environment variable.
 
-## Author
+## Resource Event (Long Polling)
 
-Ivan Dustin Bilon <ivan22.dust@gmail.com>
+`XCGI` implements a special feature for polling resource event. For example,
+a simple messaging application is required to watch realtime updates when
+there is a new message. Let us say `/users/foo/messages` resource returns
+a list of messages. The application may poll this resource every N seconds
+just to check if there is a new message. This is also known as _Short Polling_.
 
-Copyright (c) 2017
+Since short polling is costly since it opens a new socket each time, we may want
+the web server to only execute the `GET` request _only_ when the specific resource
+has been changed by `POST`, `PUT`, or `DELETE` method. This is also known as 
+`Long Polling`.
 
+To use long polling in `XCGI`, simply add `?_wait=<unique id>` parameter to the request.
+The example above will be `/users/foo/messages?_wait=152697183727785`. At the first
+request, the web server will immediately returns the response, since it only seen the unique id
+the first time. At the second request with the same unique id, the web server will wait
+for `POST`, `PUT`, or `DELETE` requests before processing the `GET` request. The generated
+unique id above is done by appending current seconds (in epoch) and a random number,
+i.e. `echo $(date +%s)$RANDOM` in bash.
+
+
+Designed by Ivan Dustin Bilon <ivan22.dust@gmail.com>, Copyright (c) 2017 - 2018
