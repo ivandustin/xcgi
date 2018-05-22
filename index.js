@@ -339,11 +339,18 @@ function FindRoot(host, url, roots) {
     }
     return false
 }
-function IsRootExist(root, roots) {
+function RootIndexOf(root, roots) {
     for(var i=0;i<roots.length;i++)
         if (roots[i].dir == root.dir)
-            return true
-    return false
+            return i
+    return -1
+}
+function FilterNewRoots(roots, old_roots) {
+    var r = []
+    for(var i=0; i<roots.length; i++)
+        if (RootIndexOf(roots[i], old_roots) === -1)
+            r.push(roots[i])
+    return r
 }
 function GetRealUrl(url, root) {
     var idx = url.indexOf('?')
@@ -614,12 +621,10 @@ if (CONFIG.https) {
 fs.watch(SITES_PATH, function(type, filename) {
     console.log('Reloading sites...')
     GetRoots(SITES_PATH, function(roots) {
-        for(var i=0; i<roots.length; i++) {
-            if (IsRootExist(roots[i], ROOTS))
-                continue
-            ROOTS.push(roots[i])
+        roots = FilterNewRoots(roots, ROOTS)
+        ROOTS = ROOTS.concat(roots)
+        for(var i=0; i<roots.length; i++)
             console.log('Site found:', roots[i].dir)
-        }
     })
 })
 // CLEANUP ////////////////////////////
