@@ -547,7 +547,7 @@ var SERVER_HANDLER = function(req, res) {
                 exec()
         }
         // IMPLEMENT _wait /////
-        if (waitid) {
+        if (waitid && req.method === 'GET') {
             if (root.lastnotify[url] === undefined)
                 root.lastnotify[url] = 0
             ///////////////////////
