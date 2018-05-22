@@ -627,6 +627,14 @@ fs.watch(SITES_PATH, function(type, filename) {
             console.log('Site found:', roots[i].dir)
     })
 })
+// GARBAGE COLLECTION /////////////////
+setInterval(function() {
+    /////////////////////////////////
+    // CLEAN UP LAST WAIT ID's
+    for(var i=0; i<ROOTS.length; i++)
+        ROOTS[i].lastwait = {}
+    /////////////////////////////////
+}, 60 * 60 * 1000) // HOURLY
 // CLEANUP ////////////////////////////
 process.on('SIGTERM', process.exit)
 process.on('SIGINT', process.exit)
