@@ -419,7 +419,7 @@ function IsAsset(url) {
 function IsMultipart(req) {
     if (req.headers['content-type'] &&
         req.headers['content-type'].indexOf('multipart/form-data') === 0 &&
-        req.method == 'POST')
+        ~['POST', 'PUT'].indexOf(req.method))
         return true
     return false
 }
@@ -445,7 +445,7 @@ function HandleMultipart(req, res, env, exec) {
 function IsFormUrlEncoded(req) {
     if (req.headers['content-type'] &&
         req.headers['content-type'].indexOf('application/x-www-form-urlencoded') === 0 &&
-        req.method == 'POST')
+        ~['POST', 'PUT'].indexOf(req.method))
         return true
     return false
 }
