@@ -420,7 +420,7 @@ function IsAsset(url) {
 function IsMultipart(req) {
     if (req.headers['content-type'] &&
         req.headers['content-type'].indexOf('multipart/form-data') === 0 &&
-        ~['POST', 'PUT'].indexOf(req.method))
+        (req.method == 'POST' || req.method == 'PUT' || req.method == 'DELETE'))
         return true
     return false
 }
@@ -446,7 +446,7 @@ function HandleMultipart(req, res, env, exec) {
 function IsFormUrlEncoded(req) {
     if (req.headers['content-type'] &&
         req.headers['content-type'].indexOf('application/x-www-form-urlencoded') === 0 &&
-        ~['POST', 'PUT'].indexOf(req.method))
+        (req.method == 'POST' || req.method == 'PUT' || req.method == 'DELETE'))
         return true
     return false
 }
@@ -547,11 +547,11 @@ var SERVER_HANDLER = function(req, res) {
             return NotFound(res)
         //////////////////////////////////////
         var waitid   = qs['_wait'] ? qs['_wait'].substr(0,22) : null
-        var notifyid = waitid ? CreateNotifyId(objects) : null
+        var notifyid = CreateNotifyId(objects)
         //////////////////////////////////////
         var f = function() {
             if (waitid) {
-                root.emitter.removeListener(url, f)
+                root.emitter.removeListener(notifyid, f)
                 root.lastwait[waitid] = new Date
             }
             //////////////////////////////////
@@ -564,16 +564,16 @@ var SERVER_HANDLER = function(req, res) {
                 exec()
         }
         // IMPLEMENT _wait /////
-        if (waitid && req.method === 'GET') {
+        if (waitid && req.method == 'GET') {
             if (root.lastnotify[notifyid] === undefined)
                 root.lastnotify[notifyid] = 0
             ///////////////////////
             var lastnotify  = root.lastnotify[notifyid]
             var lastwait    = root.lastwait[waitid]
             if (lastwait && (lastnotify === 0 || lastwait >= lastnotify)) {
-                root.emitter.on(url, f)
+                root.emitter.on(notifyid, f)
                 req.on('close', function() {
-                    root.emitter.removeListener(url, f)
+                    root.emitter.removeListener(notifyid, f)
                 })
             } else {
                 f()
@@ -584,10 +584,10 @@ var SERVER_HANDLER = function(req, res) {
         ///////////////////////
         res.on('finish', function() {
             if (root.lastnotify[notifyid] !== undefined &&
-                ~['POST', 'PUT', 'DELETE'].indexOf(req.method) &&
+                (req.method == 'POST' || req.method == 'PUT' || req.method == 'DELETE') &&
                 res.statusCode >= 200 && res.statusCode < 300) {
                 root.lastnotify[notifyid] = new Date
-                root.emitter.emit(url)
+                root.emitter.emit(notifyid)
             }
         })
     })
