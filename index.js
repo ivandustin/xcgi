@@ -154,7 +154,8 @@ var ASSET_TYPES = [
     '.rar',
     // MISC
     '.map',
-    '.msi'
+    '.msi',
+    '.sign'
 ]
 var DEFAULT_SCRIPT = 'default.sh'
 var SCRIPT_STATUS_CODES = [200, 400, 404, 201, 204, 304, 403, 409, 401]
@@ -475,6 +476,17 @@ function ChooseExecutable(filepath, filename, rootpath, cb) {
         })
     })
 }
+// CreateNotifyId concatenates REST objects
+// but the last ID is omitted. This is particularly
+// used as an index in lastnotify dictionary. This uses
+// the fast string concatenation in ECMAScript.
+function CreateNotifyId(objects) {
+    var id = ''
+    for(var i=0;i<objects.length-1;i++)
+        id += objects[i][0] + objects[i][1]
+    id += objects[objects.length-1][0]
+    return id
+}
 /////////////////////////////////
 var SERVER_HANDLER = function(req, res) {
     // req.on('data', function(data) {
@@ -534,7 +546,8 @@ var SERVER_HANDLER = function(req, res) {
         if (err)
             return NotFound(res)
         //////////////////////////////////////
-        var waitid = qs['_wait'] ? qs['_wait'].substr(0,22) : null
+        var waitid   = qs['_wait'] ? qs['_wait'].substr(0,22) : null
+        var notifyid = waitid ? CreateNotifyId(objects) : null
         //////////////////////////////////////
         var f = function() {
             if (waitid) {
@@ -552,10 +565,10 @@ var SERVER_HANDLER = function(req, res) {
         }
         // IMPLEMENT _wait /////
         if (waitid && req.method === 'GET') {
-            if (root.lastnotify[url] === undefined)
-                root.lastnotify[url] = 0
+            if (root.lastnotify[notifyid] === undefined)
+                root.lastnotify[notifyid] = 0
             ///////////////////////
-            var lastnotify  = root.lastnotify[url]
+            var lastnotify  = root.lastnotify[notifyid]
             var lastwait    = root.lastwait[waitid]
             if (lastwait && (lastnotify === 0 || lastwait >= lastnotify)) {
                 root.emitter.on(url, f)
@@ -570,10 +583,10 @@ var SERVER_HANDLER = function(req, res) {
         }
         ///////////////////////
         res.on('finish', function() {
-            if (root.lastnotify[url] !== undefined &&
+            if (root.lastnotify[notifyid] !== undefined &&
                 ~['POST', 'PUT', 'DELETE'].indexOf(req.method) &&
                 res.statusCode >= 200 && res.statusCode < 300) {
-                root.lastnotify[url] = new Date
+                root.lastnotify[notifyid] = new Date
                 root.emitter.emit(url)
             }
         })
