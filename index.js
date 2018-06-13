@@ -547,7 +547,7 @@ var SERVER_HANDLER = function(req, res) {
             return NotFound(res)
         //////////////////////////////////////
         var waitid   = qs['_wait'] ? qs['_wait'].substr(0,22) : null
-        var notifyid = CreateNotifyId(objects)
+        var notifyid = (waitid || req.method != 'GET') ? CreateNotifyId(objects) : null
         //////////////////////////////////////
         var f = function() {
             if (waitid) {
