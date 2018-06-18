@@ -1,7 +1,7 @@
 {
 	"name": "xcgi",
 	"description": "Utility for serving HTTP requests.",
-	"version": "0.3.0",
+	"version": "0.4.0",
 	"author": {
 		"name": "Ivan Dustin Bilon",
 		"email": "ivan22.dust@gmail.com"
