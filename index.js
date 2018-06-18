@@ -261,6 +261,17 @@ function ExecuteFile(req, res, path, filename, env) {
         return false
     }
     ///////////////////////////////////////////
+    // THIS FLUSH FUNCTION SENDS THE DATA WHEN
+    // CALLED TWICE. THIS IS CALLED WHEN PROCESS
+    // STDOUT IS ENDED, AND WHEN PROCESS EXITS.
+    // THIS IS BECAUSE A PROCESS MAY EXIT BUT STDOUT
+    // IS NOT YET ENDED.
+    var flush_count = 0
+    var flush = function() {
+        if (++flush_count >= 2)
+            res.end(Buffer.concat(buffer))
+    }
+    ///////////////////////////////////////////
     // SAVE PROCESS ID SINCE WE DETACHED IT. MARK IT AS RUNNING = 1.
     // KILL MARKED AS DEAD = 0 UPON PROCESS'S EXIT EVENT.
     // DO NOT APPLY -PID WHEN SAVING TO OBJECT SINCE NEGATIVE VALUE IS SLOW.
@@ -280,6 +291,9 @@ function ExecuteFile(req, res, path, filename, env) {
             }
             buffer.push(data) // BUFFER THE DATA
         }
+    })
+    proc.stdout.on('end', function() {
+        flush()
     })
     proc.stderr.on('data', function(error) {
         console.error('STDERR PATH:', path, filename)
@@ -303,7 +317,7 @@ function ExecuteFile(req, res, path, filename, env) {
                 console.warn('WARNING:', 'A process status code is invalid. StatusCode=' + code)
             }
             res.setHeader('Access-Control-Allow-Origin', '*') // ALLOW CORS ONLY FOR RESOURCE
-            res.end(Buffer.concat(buffer))
+            flush()
         } else {
             req.destroy()
             // console.error('ERROR:', 'A process possibly died. Request is destroyed.')
