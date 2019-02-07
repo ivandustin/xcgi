@@ -114,49 +114,6 @@ if (CONFIG.https) {
 var SHELL = CONFIG.shell
 var ROOTS = null
 var ROOTDIR_DELIMITER = '_'
-var ASSET_TYPES = [
-    // DOCUMENTS
-    '.htm',
-    '.html',
-    '.txt',
-    '.js',
-    '.json',
-    '.pdf',
-    '.css',
-    '.csv',
-    '.tsv',
-    // IMAGES
-    '.jpg',
-    '.png',
-    '.gif',
-    '.svg',
-    '.ico',
-    // AUDIO VIDEO
-    '.wav',
-    '.webm',
-    '.ogg',
-    '.mp3',
-    '.mp4',
-    '.mpeg',
-    // FONTS
-    '.eot',
-    '.otf',
-    '.ttf',
-    '.woff',
-    '.woff2',
-    '.sfnt',
-    // ARCHIVES
-    '.zip',
-    '.tar',
-    '.gz',
-    '.tgz',
-    '.7z',
-    '.rar',
-    // MISC
-    '.map',
-    '.msi',
-    '.sign'
-]
 var DEFAULT_SCRIPT = 'default.sh'
 var SCRIPT_STATUS_CODES = [200, 400, 404, 201, 204, 304, 403, 409, 401]
 /////////////////////////////////
@@ -323,13 +280,10 @@ function ExecuteFile(req, res, path, filename, env) {
             // console.error('ERROR:', 'A process possibly died. Request is destroyed.')
         }
     })
-    req.on('error', function() {
-        // console.error('REQUEST ERROR:', 'Script will be terminated.')
-        KillProcess(-proc.pid)
-    })
     req.on('aborted', function() {
         // console.error('REQUEST ABORTED:', 'Script will be terminated.')
-        KillProcess(-proc.pid)
+        if (req.method == 'GET')
+            KillProcess(-proc.pid)
     })
 }
 function GetRoots(path, cb) {
@@ -424,13 +378,6 @@ function NotFound(res) {
     res.statusCode = 404
     res.end('404 Not Found')
 }
-function IsAsset(url) {
-    var e = url.substr(-5)
-    for(var i=0;i<ASSET_TYPES.length;i++)
-        if (e.indexOf(ASSET_TYPES[i]) != -1)
-            return true
-    return false
-}
 function IsMultipart(req) {
     if (req.headers['content-type'] &&
         req.headers['content-type'].indexOf('multipart/form-data') === 0 &&
@@ -476,20 +423,6 @@ function HandleFormUrlEncoded(req, env, exec) {
         exec()
     })
 }
-// ChooseExecutable - check if the requested resource/script exists. If not,
-//  check if the default handler/script is present. If not, return false.
-// cb(err:bool, path, filename)
-function ChooseExecutable(filepath, filename, rootpath, cb) {
-    fs.exists(filepath + '/' + filename, function(exists) {
-        if (exists)
-            return cb(false, filepath, filename)
-        fs.exists(rootpath + '/' + DEFAULT_SCRIPT, function(exists) {
-            if (exists)
-                return cb(false, rootpath, DEFAULT_SCRIPT)
-            return cb(true)
-        })
-    })
-}
 // CreateNotifyId concatenates REST objects
 // but the last ID is omitted. This is particularly
 // used as an index in lastnotify dictionary. This uses
@@ -503,19 +436,6 @@ function CreateNotifyId(objects) {
 }
 /////////////////////////////////
 var SERVER_HANDLER = function(req, res) {
-    // req.on('data', function(data) {
-    //  console.log(data.toString())
-    // })
-    // console.log(req.url)
-    // console.log(req.method)
-    // console.log(req.headers)
-    // console.log(req.rawTrailers)
-    // console.log(req.httpVersion)
-    // var env = createEnv(req)
-    // createProcess(res, env)
-    // res.end('404 not found')
-    // return
-    //////////////////////////////////////////
     req.on('error', function(err) {
         console.log('REQUEST ERROR:', err)
     })
@@ -538,15 +458,6 @@ var SERVER_HANDLER = function(req, res) {
     if (!root)
         return NotFound(res)
     var realurl     = GetRealUrl(req.url, root)
-    if (IsAsset(realurl)) {
-        // MODIFY URL TO BE THE REAL URL SO THAT SERVE STATIC CAN WORK CORRECTLY.
-        req.url = realurl
-        return root.serveStatic(req, res, function(err) {
-            if (!err)
-                return NotFound(res)
-            res.end()
-        })
-    }
     var a           = req.url.split('?')
     var url         = a[0]
     var qs          = querystring.parse(a[1])
@@ -556,10 +467,43 @@ var SERVER_HANDLER = function(req, res) {
     var rootpath    = path.join(SITES_PATH, root.dir)
     var filename    = GetFileName(req.method, objects)
     var filepath    = path.join(rootpath, objectname)
-    ChooseExecutable(filepath, filename, rootpath, function(err, path, filename) {
-        if (err)
-            return NotFound(res)
-        //////////////////////////////////////
+
+    // MODIFY URL TO BE THE REAL URL SO THAT SERVE STATIC CAN WORK CORRECTLY.
+    req.url = realurl
+    root.serveStatic(req, res, function(err) {
+        if (!err)
+            req.emit('retry')
+        else
+            res.end()
+    })
+
+    fs.exists(path.join(filepath, filename), function(exists) {
+        if (exists)
+            executeAPI(filepath, filename)
+        else
+            req.emit('retry')
+    })
+
+    {
+        // WHEN 'RETRY' EVENT HAS BEEN CALLED TWICE,
+        // EXECUTE DEFAULT SCRIPT IF PRESENT.
+        var count = 0
+        req.on('retry', function() {
+            if (++count == 2)
+                req.emit('default')
+        })
+    }
+
+    req.on('default', function() {
+        fs.exists(path.join(rootpath, DEFAULT_SCRIPT), function(exists) {
+            if (exists)
+                executeAPI(rootpath, DEFAULT_SCRIPT)
+            else
+                NotFound(res)
+        })
+    })
+
+    function executeAPI(path, filename) {
         var waitid   = qs['_wait'] ? qs['_wait'].substr(0,22) : null
         var notifyid = (waitid || req.method != 'GET') ? CreateNotifyId(objects) : null
         //////////////////////////////////////
@@ -598,18 +542,14 @@ var SERVER_HANDLER = function(req, res) {
         ///////////////////////
         res.on('finish', function() {
             if (root.lastnotify[notifyid] !== undefined &&
-                (req.method == 'POST' || req.method == 'PUT' || req.method == 'DELETE') &&
+                req.method != 'GET' &&
                 res.statusCode >= 200 && res.statusCode < 300) {
                 root.lastnotify[notifyid] = new Date
                 root.emitter.emit(notifyid)
             }
         })
-    })
-    // console.log(root)
-    // console.log(realurl)
-    // console.log(objects)
-    // console.log(objectname)
-    // console.log(filename)
+    }
+
 }
 var SERVER_HANDLER_REDIRECT = function(req, res) {
     req.on('error', function(err) {
