@@ -452,27 +452,19 @@ var SERVER_HANDLER = function(req, res) {
     // MODIFY URL TO BE THE REAL URL SO THAT SERVE STATIC CAN WORK CORRECTLY.
     req.url = realurl
     root.serveStatic(req, res, function(err) {
-        req.emit('retry')
+        req.emit('no static')
     })
 
-    fs.exists(path.join(filepath, filename), function(exists) {
-        if (exists)
-            executeAPI(filepath, filename)
-        else
-            req.emit('retry')
-    })
-
-    {
-        // WHEN 'RETRY' EVENT HAS BEEN CALLED TWICE,
-        // EXECUTE DEFAULT SCRIPT IF PRESENT.
-        var count = 0
-        req.on('retry', function() {
-            if (++count == 2)
-                req.emit('default')
+    req.on('no static', function() {
+        fs.exists(path.join(filepath, filename), function(exists) {
+            if (exists)
+                executeAPI(filepath, filename)
+            else
+                req.emit('no api')
         })
-    }
+    })
 
-    req.on('default', function() {
+    req.on('no api', function() {
         fs.exists(path.join(rootpath, DEFAULT_SCRIPT), function(exists) {
             if (exists)
                 executeAPI(rootpath, DEFAULT_SCRIPT)
