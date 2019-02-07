@@ -451,7 +451,7 @@ var SERVER_HANDLER = function(req, res) {
 
     // MODIFY URL TO BE THE REAL URL SO THAT SERVE STATIC CAN WORK CORRECTLY.
     req.url = realurl
-    root.serveStatic(req, res, function(err) {
+    root.serveStatic(req, res, function() {
         req.emit('no static')
     })
 
