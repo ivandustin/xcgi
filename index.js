@@ -449,22 +449,22 @@ var SERVER_HANDLER = function(req, res) {
     var filename    = GetFileName(req.method, objects)
     var filepath    = path.join(rootpath, objectname)
 
-    fs.exists(path.join(filepath, filename), function(exists) {
-        if (exists)
-            executeAPI(filepath, filename)
-        else
-            req.emit('no api')
-    })
-
-    req.on('no api', function() {
-        // MODIFY URL TO BE THE REAL URL SO THAT SERVE STATIC CAN WORK CORRECTLY.
-        req.url = realurl
-        root.serveStatic(req, res, function(err) {
-            req.emit('no static')
-        })
+    // MODIFY URL TO BE THE REAL URL SO THAT SERVE STATIC CAN WORK CORRECTLY.
+    req.url = realurl
+    root.serveStatic(req, res, function(err) {
+        req.emit('no static')
     })
 
     req.on('no static', function() {
+        fs.exists(path.join(filepath, filename), function(exists) {
+            if (exists)
+                executeAPI(filepath, filename)
+            else
+                req.emit('no api')
+        })
+    })
+
+    req.on('no api', function() {
         fs.exists(path.join(rootpath, DEFAULT_SCRIPT), function(exists) {
             if (exists)
                 executeAPI(rootpath, DEFAULT_SCRIPT)
