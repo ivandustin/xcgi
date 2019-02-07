@@ -102,10 +102,6 @@ if (CONFIG.https) {
     }
 }
 /////////////////////////////////
-// console.log(SITES_PATH, PORT)
-// console.log(CONFIG)
-// process.exit(0)
-/////////////////////////////////
 var SHELL = CONFIG.shell
 var ROOTS = null
 var ROOTDIR_DELIMITER = '_'
@@ -178,7 +174,6 @@ function CreateEnv(req, url, qs, objects, rootdir) {
 }
 function ConsumeQueue() {
     if (INSTANCE_COUNT < CONFIG.maxInstances && QUEUE.length > 0) {
-        // console.log('PULL', INSTANCE_COUNT, QUEUE.length)
         var exec = QUEUE.shift()
         setTimeout(exec, 0) // SCHEDULE EXECUTION TO AVOID NESTED FUNCTION CALLS
     }
@@ -186,11 +181,9 @@ function ConsumeQueue() {
 function ExecuteFile(req, res, path, filename, env) {
     if (INSTANCE_COUNT >= CONFIG.maxInstances) {
         QUEUE.push(ExecuteFile.bind(this, req, res, path, filename, env))
-        // console.log('DEFER', INSTANCE_COUNT, QUEUE.length)
         return
     }
     INSTANCE_COUNT++ // INCREMENT ON ACCEPT
-    // console.log('ACCEPTED', INSTANCE_COUNT, QUEUE.length)
     var buffer      = []
     var infertype   = false
     var proc        = null
@@ -200,7 +193,7 @@ function ExecuteFile(req, res, path, filename, env) {
             env: env
         })
     } catch(e) {
-        console.log('SPAWN ERROR:', e.message)
+        console.error('SPAWN ERROR %s %s: %s', path, filename, e.message)
         req.destroy()
         return false
     }
@@ -234,12 +227,11 @@ function ExecuteFile(req, res, path, filename, env) {
     proc.stdout.on('end', function() {
         flush()
     })
-    proc.stderr.on('data', function(error) {
-        console.error('STDERR PATH:', path, filename)
-        console.error('STDERR MSG:', error.toString())
+    proc.stderr.on('data', function(data) {
+        console.error('STDERR %s %s: %s', path, filename, data.toString())
     })
-    proc.on('error', function(err) {
-        console.error('PROCESS ERROR:', err)
+    proc.on('error', function(error) {
+        console.error('PROCESS ERROR %s %s: %s', path, filename, error.message)
     })
     proc.on('exit', function(code, signal) {
         /////////////////////////////
@@ -257,11 +249,10 @@ function ExecuteFile(req, res, path, filename, env) {
             flush()
         } else {
             req.destroy()
-            // console.error('ERROR:', 'A process possibly died. Request is destroyed.')
         }
     })
     req.on('aborted', function() {
-        // console.error('REQUEST ABORTED:', 'Script will be terminated.')
+        console.error('REQUEST ABORTED %s %s', path, filename)
     })
 }
 function GetRoots(path, cb) {
@@ -414,8 +405,20 @@ function CreateNotifyId(objects) {
 }
 /////////////////////////////////
 var SERVER_HANDLER = function(req, res) {
-    req.on('error', function(err) {
-        console.log('REQUEST ERROR:', err)
+    {
+        // LOG REQUEST INFORMATION TO STDOUT
+        var url = req.url
+        var start = new Date()
+        console.log('%s %s %s', start.toLocaleString(), req.method, url)
+        res.on('finish', function() {
+            var end = new Date()
+            var duration = end - start
+            console.log('%s %s %s %s %sms', start.toLocaleString(), req.method, url, res.statusCode, duration)
+        })
+    }
+    //////////////////////////////////////////
+    req.on('error', function(error) {
+        console.error('REQUEST ERROR: %s', error.message)
     })
     //////////////////////////////////////////
     // HANDLE CORS
@@ -530,8 +533,8 @@ var SERVER_HANDLER = function(req, res) {
 
 }
 var SERVER_HANDLER_REDIRECT = function(req, res) {
-    req.on('error', function(err) {
-        console.log('REDIRECT REQUEST ERROR:', err)
+    req.on('error', function(error) {
+        console.error('REDIRECT REQUEST ERROR: %s', error.message)
     })
     res.statusCode = 302
     var host = req.headers.host
@@ -548,20 +551,20 @@ var LISTEN_HANDLER = function(port) {
             GetRoots(SITES_PATH, function(roots) {
                 ROOTS = roots
                 for(var i=0; i<roots.length; i++)
-                    console.log('Site found:', roots[i].dir)
+                    console.error('Site found:', roots[i].dir)
             })
             IS_GETROOTS = true
         }
         if (! IS_GREET) {
-            console.log('Welcome to XCGI!')
-            console.log('Sites path at', SITES_PATH)
-            console.log('Max instances is', CONFIG.maxInstances)
-            console.log('Shell used is', SHELL)
-            console.log('HTTP port is', HTTP_PORT)
-            console.log('HTTPS port is', HTTPS_PORT)
+            console.error('Welcome to XCGI!')
+            console.error('Sites path at', SITES_PATH)
+            console.error('Max instances is', CONFIG.maxInstances)
+            console.error('Shell used is', SHELL)
+            console.error('HTTP port is', HTTP_PORT)
+            console.error('HTTPS port is', HTTPS_PORT)
             IS_GREET = true
         }
-        console.log('Online at port', port)
+        console.error('Online at port', port)
     }
 }
 // MAIN ///////////////////////////////
@@ -575,12 +578,12 @@ if (CONFIG.https) {
     https.createServer(CONFIG.httpsOption, SERVER_HANDLER).listen(HTTPS_PORT, LISTEN_HANDLER(HTTPS_PORT))
 }
 fs.watch(SITES_PATH, function(type, filename) {
-    console.log('Reloading sites...')
+    console.error('Reloading sites...')
     GetRoots(SITES_PATH, function(roots) {
         roots = FilterNewRoots(roots, ROOTS)
         ROOTS = ROOTS.concat(roots)
         for(var i=0; i<roots.length; i++)
-            console.log('Site found:', roots[i].dir)
+            console.error('Site found:', roots[i].dir)
     })
 })
 // GARBAGE COLLECTION /////////////////
