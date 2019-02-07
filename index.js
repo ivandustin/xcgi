@@ -272,7 +272,7 @@ function GetRoots(filepath, cb) {
             root.dir = files[i]
             root.domain = a.shift()
             root.namespace = '/' + a.join('/')
-            root.serveStatic = serveStatic(path.join(SITES_PATH, root.dir))
+            root.serveStatic = serveStatic(path.join(SITES_PATH, root.dir), { redirect: false })
             roots.push(root)
         }
         cb(roots)
@@ -450,9 +450,8 @@ var SERVER_HANDLER = function(req, res) {
     var filepath    = path.join(rootpath, objectname)
 
     // MODIFY URL TO BE THE REAL URL SO THAT SERVE STATIC CAN WORK CORRECTLY.
-    // ALWAYS ADD TRAILING SLASH SO THAT SERVE STATIC DO NOT REDIRECT WHEN IT IS MISSING.
-    req.url = realurl + '/'
-    root.serveStatic(req, res, function() {
+    req.url = realurl
+    root.serveStatic(req, res, function(err) {
         req.emit('retry')
     })
 
