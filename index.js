@@ -37,11 +37,6 @@ var HTTP_PORT       = 80
 var HTTPS_PORT      = 443
 var QUEUE           = []
 var INSTANCE_COUNT  = 0
-var PGIDS           = {}
-// IN WINDOWS, WE CAN KILL PGID (USING KILL PROGRAM) WITHOUT
-// DETACHING THE PROCESS. IN UNIX, WE NEED TO DETACH THE PROCESS
-// SO THAT WE CAN KILL PGID USING `process.kill(-pgid)` FUNCTION.
-var DETACH_PROCESS = process.platform == 'win32' ? false : true
 /// CONFIGURE ///////////////////
 var CONFIG = {
     http: true,
@@ -116,9 +111,6 @@ var ROOTS = null
 var ROOTDIR_DELIMITER = '_'
 var DEFAULT_SCRIPT = 'default.sh'
 var SCRIPT_STATUS_CODES = [200, 400, 404, 201, 204, 304, 403, 409, 401]
-/////////////////////////////////
-var KillProcess     = GetProcessKiller()
-var KillProcessSync = GetProcessKiller(true)
 /////////////////////////////////
 function Root() {
     this.dir        = null
@@ -209,8 +201,7 @@ function ExecuteFile(req, res, path, filename, env) {
     try {
         proc = spawn(SHELL, [filename], {
             cwd: path,
-            env: env,
-            detached: DETACH_PROCESS
+            env: env
         })
     } catch(e) {
         console.log('SPAWN ERROR:', e.message)
@@ -228,11 +219,6 @@ function ExecuteFile(req, res, path, filename, env) {
         if (++flush_count >= 2)
             res.end(Buffer.concat(buffer))
     }
-    ///////////////////////////////////////////
-    // SAVE PROCESS ID SINCE WE DETACHED IT. MARK IT AS RUNNING = 1.
-    // KILL MARKED AS DEAD = 0 UPON PROCESS'S EXIT EVENT.
-    // DO NOT APPLY -PID WHEN SAVING TO OBJECT SINCE NEGATIVE VALUE IS SLOW.
-    PGIDS[proc.pid] = 1
     ///////////////////////////////////////////
     proc.stdout.on('data', function(data) {
         if (!res.finished) {
@@ -263,8 +249,6 @@ function ExecuteFile(req, res, path, filename, env) {
         /////////////////////////////
         INSTANCE_COUNT--
         ConsumeQueue()
-        // INVALIDATE PGID //////////
-        PGIDS[proc.pid] = 0
         /////////////////////////////
         if (code != null && code < 256 && code >= 0 && !signal) {
             if (SCRIPT_STATUS_CODES.length > code)
@@ -282,8 +266,6 @@ function ExecuteFile(req, res, path, filename, env) {
     })
     req.on('aborted', function() {
         // console.error('REQUEST ABORTED:', 'Script will be terminated.')
-        if (req.method == 'GET')
-            KillProcess(-proc.pid)
     })
 }
 function GetRoots(path, cb) {
@@ -613,18 +595,6 @@ setInterval(function() {
         ROOTS[i].lastwait = {}
     /////////////////////////////////
 }, 60 * 60 * 1000) // HOURLY
-// CLEANUP ////////////////////////////
-process.on('SIGTERM', process.exit)
-process.on('SIGINT', process.exit)
-process.on('SIGHUP', process.exit)
-process.on('exit', function() {
-    try {
-        // KILL ALL SPAWNED PROCESS
-        for(var pgid in PGIDS)
-            if (PGIDS[pgid] == 1)
-                KillProcessSync(-pgid)
-    } catch(e) {}
-})
 // HELPERS/UTILITIES //////////////////
 function getopt(argv, handle) {
     for(var i=0; i<argv.length; i++) {
@@ -644,18 +614,4 @@ function getopt(argv, handle) {
         var hasValue = handle(opt, value)
         if (hasValue) i++ // skip the next argument
     }
-}
-function KillProcessWin32(pid) {
-    spawn('kill', ['--', pid])
-}
-function KillProcessSyncWin32(pid) {
-    execFileSync('kill', ['--', pid])
-}
-function GetProcessKiller(sync) {
-    if (process.platform == 'win32')
-        if (sync)
-            return KillProcessSyncWin32
-        else
-            return KillProcessWin32
-    return process.kill
 }
