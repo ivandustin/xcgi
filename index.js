@@ -255,9 +255,9 @@ function ExecuteFile(req, res, path, filename, env) {
         console.error('REQUEST ABORTED %s %s', path, filename)
     })
 }
-function GetRoots(path, cb) {
+function GetRoots(filepath, cb) {
     var roots = []
-    fs.readdir(path, function(err, files) {
+    fs.readdir(filepath, function(err, files) {
         if (err)
             throw err
         files.sort(function(a, b) { return b.length - a.length })
@@ -272,7 +272,7 @@ function GetRoots(path, cb) {
             root.dir = files[i]
             root.domain = a.shift()
             root.namespace = '/' + a.join('/')
-            root.serveStatic = serveStatic(SITES_PATH + '/' + root.dir)
+            root.serveStatic = serveStatic(path.join(SITES_PATH, root.dir))
             roots.push(root)
         }
         cb(roots)
@@ -450,12 +450,10 @@ var SERVER_HANDLER = function(req, res) {
     var filepath    = path.join(rootpath, objectname)
 
     // MODIFY URL TO BE THE REAL URL SO THAT SERVE STATIC CAN WORK CORRECTLY.
-    req.url = realurl
-    root.serveStatic(req, res, function(err) {
-        if (!err)
-            req.emit('retry')
-        else
-            res.end()
+    // ALWAYS ADD TRAILING SLASH SO THAT SERVE STATIC DO NOT REDIRECT WHEN IT IS MISSING.
+    req.url = realurl + '/'
+    root.serveStatic(req, res, function() {
+        req.emit('retry')
     })
 
     fs.exists(path.join(filepath, filename), function(exists) {
