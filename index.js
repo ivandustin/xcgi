@@ -145,7 +145,7 @@ function EnvValue(env, prefix, name, a) {
     }
 }
 function CreateEnv(req, url, qs, objects, rootdir) {
-    var env = {}
+    var env = Object.assign(process.env)
     ////////////////////////////////////
     env['REQUEST_URL'] = url
     for(var key in qs)
@@ -174,10 +174,6 @@ function CreateEnv(req, url, qs, objects, rootdir) {
     env['STATUS_FORBIDDEN']     = 6
     env['STATUS_CONFLICT']      = 7
     env['STATUS_UNAUTHORIZED']  = 8
-    ////////////////////////////////////
-    // INHERITS FROM PROCESS.ENV
-    env['PATH'] = process.env['PATH']
-    ////////////////////////////////////
     return env
 }
 function ConsumeQueue() {
