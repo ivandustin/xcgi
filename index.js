@@ -136,7 +136,7 @@ function envValue(env, prefix, name, value) {
         env[prefix + name] = value
 }
 function createEnv(req, url, qs, objects, rootdir) {
-    var env = Object.assign(process.env)
+    var env = Object.assign({}, process.env)
     ////////////////////////////////////
     env['REQUEST_URL'] = url
     for(var key in qs)
