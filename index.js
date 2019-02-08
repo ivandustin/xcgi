@@ -13,7 +13,7 @@ var spawn = require('child_process').spawn
 var execFileSync = require('child_process').execFileSync
 var fs = require('fs')
 var path = require('path')
-var multiparty = require('multiparty')
+var formidable = require('formidable')
 var EventEmitter = require('events').EventEmitter
 /// HELP MESSAGE ////////////////
 function printHelp() {
@@ -26,7 +26,9 @@ function printHelp() {
         '    -s          HTTPS only. Turn off HTTP.',
         '    -r          Redirect http to https. Off by default.',
         '    -m <int>    Max instances of spawned process.',
-        '    --shell <>  Set the default shell to be used. Default is bash.'
+        '    --shell <>  Set the default shell to be used. Default is bash.',
+        '    --max-fields-size <int>  Max size of all fields in Form. Default is 128MB.',
+        '    --max-file-size <int>    Max file size in file uploads. Default is 256MB.'
     ]
     for(var i=0;i<msg.length;i++)
         console.log(msg[i])
@@ -47,7 +49,9 @@ var config = {
         cert: ''
     },
     maxInstances: os.cpus().length * 16,
-    shell: 'bash'
+    shell: 'bash',
+    maxFieldsSize: 128,
+    maxFileSize: 256
 }
 getopt(process.argv.splice(2), function(option, value) {
     switch(option) {
@@ -74,6 +78,12 @@ getopt(process.argv.splice(2), function(option, value) {
             return true
         case 'shell':
             config.shell = value
+            return true
+        case 'max-fields-size':
+            config.maxFieldsSize = parseInt(value)
+            return true
+        case 'max-file-size':
+            config.maxFileSize = parseInt(value)
             return true
         case 'help':
             printHelp()
@@ -118,27 +128,12 @@ function Root() {
     this.lastwait   = {}
 }
 /////////////////////////////////
-function envValue(env, prefix, name, a) {
+function envValue(env, prefix, name, value) {
     name = name.toUpperCase()
-    var hasBrackets = name.length > 2 && name.substr(-2) == '[]' ? true : false
-    if (hasBrackets)
-        name = name.substr(0, name.length-2)
-    if (hasBrackets && !Array.isArray(a)) {
-        env[prefix + name] = encodeURI(a)
-    } else if (Array.isArray(a)) {
-        if (a.length == 0)
-            return
-        if (hasBrackets) {
-            var values = []
-            for(var i=0;i<a.length;i++)
-                values.push(encodeURI(a[i]))
-            env[prefix + name] = values.join(' ')
-        } else {
-            env[prefix + name] = a[0]
-        }
-    } else {
-        env[prefix + name] = a
-    }
+    if (Array.isArray(value))
+        env[prefix + name] = value.join('\t')
+    else
+        env[prefix + name] = value
 }
 function createEnv(req, url, qs, objects, rootdir) {
     var env = Object.assign(process.env)
@@ -347,48 +342,48 @@ function notFound(res) {
     res.statusCode = 404
     res.end('404 Not Found')
 }
-function isMultipart(req) {
+function newFormidable() {
+    var form            = new formidable.IncomingForm()
+    form.multiples      = true
+    form.maxFieldsSize  = config.maxFieldsSize * 1024 * 1024
+    form.maxFileSize    = config.maxFileSize * 1024 * 1024
+    return form
+}
+function isForm(req) {
     if (req.headers['content-type'] &&
-        req.headers['content-type'].indexOf('multipart/form-data') === 0 &&
-        (req.method == 'POST' || req.method == 'PUT' || req.method == 'DELETE'))
+        (
+            req.headers['content-type'].indexOf('multipart/form-data') == 0 ||
+            req.headers['content-type'].indexOf('application/x-www-form-urlencoded') == 0
+        ) &&
+        req.method != 'GET')
         return true
     return false
 }
-function handleMultipart(req, res, env, exec) {
-    var form        = new multiparty.Form();
+function handleForm(req, res, env, exec) {
+    var form = newFormidable()
+    form.on('error', function(error) {
+        notFound(res)
+    })
     form.parse(req, function(err, fields, files) {
         if (err)
             return notFound(res)
-        for(var field in fields)
+        for(var field in fields) {
             envValue(env, '_POST_', field, fields[field])
-        for(var file in files) {
-            var values = []
-            for(var i=0; i<files[file].length; i++) {
-                if (files[file][i].size == 0)
-                    continue
-                values.push(files[file][i].path)
-            }
-            envValue(env, '_FILES_', file, values)
         }
-        exec()
-    })
-}
-function isFormUrlEncoded(req) {
-    if (req.headers['content-type'] &&
-        req.headers['content-type'].indexOf('application/x-www-form-urlencoded') === 0 &&
-        (req.method == 'POST' || req.method == 'PUT' || req.method == 'DELETE'))
-        return true
-    return false
-}
-function handleFormUrlEncoded(req, env, exec) {
-    var data = ''
-    req.on('data', function(buffer) {
-        data += buffer.toString()
-    })
-    req.on('end', function() {
-        var obj = querystring.parse(data)
-        for(var field in obj)
-            envValue(env, '_POST_', field, obj[field])
+        if (files) {
+            for(var field in files) {
+                var file = files[field]
+                var values = []
+                if (Array.isArray(file)) {
+                    for (var i=0; i<file.length; i++) {
+                        values.push(file[i].path)
+                    }
+                } else {
+                    values.push(file.path)
+                }
+                envValue(env, '_FILES_', field, values)
+            }
+        }
         exec()
     })
 }
@@ -484,10 +479,8 @@ var server_handler = function(req, res) {
             }
             //////////////////////////////////
             var exec = executeFile.bind(this, req, res, path, filename, env)
-            if (isMultipart(req))
-                handleMultipart(req, res, env, exec)
-            else if (isFormUrlEncoded(req))
-                handleFormUrlEncoded(req, env, exec)
+            if (isForm(req))
+                handleForm(req, res, env, exec)
             else
                 exec()
         }
@@ -551,6 +544,8 @@ var listen_handler = function(port) {
             console.error('Shell used is', shell)
             console.error('HTTP port is', http_port)
             console.error('HTTPS port is', https_port)
+            console.error('Max fields size is %sMB', config.maxFieldsSize)
+            console.error('Max file size is %sMB', config.maxFileSize)
             is_greet = true
         }
         console.error('Online at port', port)
