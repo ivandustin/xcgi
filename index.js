@@ -16,7 +16,7 @@ var path = require('path')
 var multiparty = require('multiparty')
 var EventEmitter = require('events').EventEmitter
 /// HELP MESSAGE ////////////////
-function PRINTHELP() {
+function printHelp() {
     var msg = [
         'xcgi <options...> <sites path>',
         'Options:',
@@ -32,13 +32,13 @@ function PRINTHELP() {
         console.log(msg[i])
 }
 /////////////////////////////////
-var SITES_PATH      = '.'
-var HTTP_PORT       = 80
-var HTTPS_PORT      = 443
-var QUEUE           = []
-var INSTANCE_COUNT  = 0
+var sites_path      = '.'
+var http_port       = 80
+var https_port      = 443
+var queue           = []
+var instance_count  = 0
 /// CONFIGURE ///////////////////
-var CONFIG = {
+var config = {
     http: true,
     https: true,
     redirect: false,
@@ -53,48 +53,48 @@ getopt(process.argv.splice(2), function(option, value) {
     switch(option) {
         case 'p':
             var ports  = value.split(':')
-            HTTP_PORT  = ports[0] ? parseInt(ports[0]) : HTTP_PORT
-            HTTPS_PORT = ports[1] ? parseInt(ports[1]) : HTTPS_PORT
+            http_port  = ports[0] ? parseInt(ports[0]) : http_port
+            https_port = ports[1] ? parseInt(ports[1]) : https_port
             return true
         case 'h':
-            CONFIG.http = true
-            CONFIG.https = false
+            config.http = true
+            config.https = false
             return false
         case 's':
-            CONFIG.http = false
-            CONFIG.https = true
+            config.http = false
+            config.https = true
             return false
         case 'r':
-            CONFIG.http = true
-            CONFIG.https = true
-            CONFIG.redirect = true
+            config.http = true
+            config.https = true
+            config.redirect = true
             return false
         case 'm':
-            CONFIG.maxInstances = parseInt(value)
+            config.maxInstances = parseInt(value)
             return true
         case 'shell':
-            CONFIG.shell = value
+            config.shell = value
             return true
         case 'help':
-            PRINTHELP()
+            printHelp()
             process.exit(0)
             return false
         default:
-            if (SITES_PATH == '.')
-                SITES_PATH = value
+            if (sites_path == '.')
+                sites_path = value
             return false
     }
 })
-if (CONFIG.https) {
+if (config.https) {
     var key = process.env['XCGI_HTTPS_KEY']
     var cert = process.env['XCGI_HTTPS_CERT']
     if (fs.existsSync(key) && fs.existsSync(cert)) {
-        CONFIG.httpsOption.key = fs.readFileSync(key)
-        CONFIG.httpsOption.cert = fs.readFileSync(cert)
+        config.httpsOption.key = fs.readFileSync(key)
+        config.httpsOption.cert = fs.readFileSync(cert)
     } else {
-        if (CONFIG.http) {
+        if (config.http) {
             console.error('WARNING:', 'XCGI_HTTPS_KEY or XCGI_HTTPS_CERT is not configured. Turning HTTPS off instead.')
-            CONFIG.https = false
+            config.https = false
         } else {
             console.error('ERROR:', 'XCGI_HTTPS_KEY or XCGI_HTTPS_CERT is not configured.')
             process.exit(1)
@@ -102,11 +102,11 @@ if (CONFIG.https) {
     }
 }
 /////////////////////////////////
-var SHELL = CONFIG.shell
-var ROOTS = null
-var ROOTDIR_DELIMITER = '_'
-var DEFAULT_SCRIPT = 'default.sh'
-var SCRIPT_STATUS_CODES = [200, 400, 404, 201, 204, 304, 403, 409, 401]
+var shell = config.shell
+var roots = null
+var rootdir_delimiter = '_'
+var default_script = 'default.sh'
+var script_status_codes = [200, 400, 404, 201, 204, 304, 403, 409, 401]
 /////////////////////////////////
 function Root() {
     this.dir        = null
@@ -118,7 +118,7 @@ function Root() {
     this.lastwait   = {}
 }
 /////////////////////////////////
-function EnvValue(env, prefix, name, a) {
+function envValue(env, prefix, name, a) {
     name = name.toUpperCase()
     var hasBrackets = name.length > 2 && name.substr(-2) == '[]' ? true : false
     if (hasBrackets)
@@ -140,12 +140,12 @@ function EnvValue(env, prefix, name, a) {
         env[prefix + name] = a
     }
 }
-function CreateEnv(req, url, qs, objects, rootdir) {
+function createEnv(req, url, qs, objects, rootdir) {
     var env = Object.assign(process.env)
     ////////////////////////////////////
     env['REQUEST_URL'] = url
     for(var key in qs)
-        EnvValue(env, 'QUERY_', key, qs[key])
+        envValue(env, 'QUERY_', key, qs[key])
     ////////////////////////////////////
     env['REQUEST_METHOD'] = req.method
     ////////////////////////////////////
@@ -172,23 +172,23 @@ function CreateEnv(req, url, qs, objects, rootdir) {
     env['STATUS_UNAUTHORIZED']  = 8
     return env
 }
-function ConsumeQueue() {
-    if (INSTANCE_COUNT < CONFIG.maxInstances && QUEUE.length > 0) {
-        var exec = QUEUE.shift()
+function consumeQueue() {
+    if (instance_count < config.maxInstances && queue.length > 0) {
+        var exec = queue.shift()
         setTimeout(exec, 0) // SCHEDULE EXECUTION TO AVOID NESTED FUNCTION CALLS
     }
 }
-function ExecuteFile(req, res, path, filename, env) {
-    if (INSTANCE_COUNT >= CONFIG.maxInstances) {
-        QUEUE.push(ExecuteFile.bind(this, req, res, path, filename, env))
+function executeFile(req, res, path, filename, env) {
+    if (instance_count >= config.maxInstances) {
+        queue.push(executeFile.bind(this, req, res, path, filename, env))
         return
     }
-    INSTANCE_COUNT++ // INCREMENT ON ACCEPT
+    instance_count++ // INCREMENT ON ACCEPT
     var buffer      = []
     var infertype   = false
     var proc        = null
     try {
-        proc = spawn(SHELL, [filename], {
+        proc = spawn(shell, [filename], {
             cwd: path,
             env: env
         })
@@ -235,12 +235,12 @@ function ExecuteFile(req, res, path, filename, env) {
     })
     proc.on('exit', function(code, signal) {
         /////////////////////////////
-        INSTANCE_COUNT--
-        ConsumeQueue()
+        instance_count--
+        consumeQueue()
         /////////////////////////////
         if (code != null && code < 256 && code >= 0 && !signal) {
-            if (SCRIPT_STATUS_CODES.length > code)
-                res.statusCode = SCRIPT_STATUS_CODES[code]
+            if (script_status_codes.length > code)
+                res.statusCode = script_status_codes[code]
             else {
                 res.statusCode = 500
                 console.warn('WARNING:', 'A process status code is invalid. StatusCode=' + code)
@@ -255,7 +255,7 @@ function ExecuteFile(req, res, path, filename, env) {
         console.error('REQUEST ABORTED %s %s', path, filename)
     })
 }
-function GetRoots(filepath, cb) {
+function getRoots(filepath, cb) {
     var roots = []
     fs.readdir(filepath, function(err, files) {
         if (err)
@@ -267,18 +267,18 @@ function GetRoots(filepath, cb) {
             return 1
         })
         for(var i=0; i<files.length; i++) {
-            var a = files[i].split(ROOTDIR_DELIMITER)
+            var a = files[i].split(rootdir_delimiter)
             var root = new Root()
             root.dir = files[i]
             root.domain = a.shift()
             root.namespace = '/' + a.join('/')
-            root.serveStatic = serveStatic(path.join(SITES_PATH, root.dir), { redirect: false })
+            root.serveStatic = serveStatic(path.join(sites_path, root.dir), { redirect: false })
             roots.push(root)
         }
         cb(roots)
     })
 }
-function FindRoot(host, url, roots) {
+function findRoot(host, url, roots) {
     for(var i=0; i<roots.length; i++) {
         if ((roots[i].domain == '' || host.indexOf(roots[i].domain) != -1)
             && url.indexOf(roots[i].namespace) == 0)
@@ -286,7 +286,7 @@ function FindRoot(host, url, roots) {
     }
     return false
 }
-function RootIndexOf(root, roots) {
+function rootIndexOf(root, roots) {
     for(var i=0;i<roots.length;i++)
         if (roots[i].dir == root.dir)
             return i
@@ -295,11 +295,11 @@ function RootIndexOf(root, roots) {
 function FilterNewRoots(roots, old_roots) {
     var r = []
     for(var i=0; i<roots.length; i++)
-        if (RootIndexOf(roots[i], old_roots) === -1)
+        if (rootIndexOf(roots[i], old_roots) === -1)
             r.push(roots[i])
     return r
 }
-function GetRealUrl(url, root) {
+function getRealUrl(url, root) {
     var idx = url.indexOf('?')
     if (idx !== -1)
         url = url.substr(0, idx)
@@ -311,7 +311,7 @@ function GetRealUrl(url, root) {
     }
     return url
 }
-function GetObjects(url) {
+function getObjects(url) {
     var a = url.split('/')
     var objects = []
     var c = 0
@@ -326,7 +326,7 @@ function GetObjects(url) {
     }
     return objects
 }
-function GetFileName(method, objects) {
+function getFilename(method, objects) {
     var file = false
     if (method == 'GET')
         if (objects.length > 0 && objects[objects.length-1].length > 1)
@@ -341,26 +341,26 @@ function GetFileName(method, objects) {
         file = 'destroy.sh'
     return file
 }
-function NotFound(res) {
+function notFound(res) {
     if (res.finished)
         return
     res.statusCode = 404
     res.end('404 Not Found')
 }
-function IsMultipart(req) {
+function isMultipart(req) {
     if (req.headers['content-type'] &&
         req.headers['content-type'].indexOf('multipart/form-data') === 0 &&
         (req.method == 'POST' || req.method == 'PUT' || req.method == 'DELETE'))
         return true
     return false
 }
-function HandleMultipart(req, res, env, exec) {
+function handleMultipart(req, res, env, exec) {
     var form        = new multiparty.Form();
     form.parse(req, function(err, fields, files) {
         if (err)
-            return NotFound(res)
+            return notFound(res)
         for(var field in fields)
-            EnvValue(env, '_POST_', field, fields[field])
+            envValue(env, '_POST_', field, fields[field])
         for(var file in files) {
             var values = []
             for(var i=0; i<files[file].length; i++) {
@@ -368,19 +368,19 @@ function HandleMultipart(req, res, env, exec) {
                     continue
                 values.push(files[file][i].path)
             }
-            EnvValue(env, '_FILES_', file, values)
+            envValue(env, '_FILES_', file, values)
         }
         exec()
     })
 }
-function IsFormUrlEncoded(req) {
+function isFormUrlEncoded(req) {
     if (req.headers['content-type'] &&
         req.headers['content-type'].indexOf('application/x-www-form-urlencoded') === 0 &&
         (req.method == 'POST' || req.method == 'PUT' || req.method == 'DELETE'))
         return true
     return false
 }
-function HandleFormUrlEncoded(req, env, exec) {
+function handleFormUrlEncoded(req, env, exec) {
     var data = ''
     req.on('data', function(buffer) {
         data += buffer.toString()
@@ -388,15 +388,15 @@ function HandleFormUrlEncoded(req, env, exec) {
     req.on('end', function() {
         var obj = querystring.parse(data)
         for(var field in obj)
-            EnvValue(env, '_POST_', field, obj[field])
+            envValue(env, '_POST_', field, obj[field])
         exec()
     })
 }
-// CreateNotifyId concatenates REST objects
+// createNotifyId concatenates REST objects
 // but the last ID is omitted. This is particularly
 // used as an index in lastnotify dictionary. This uses
 // the fast string concatenation in ECMAScript.
-function CreateNotifyId(objects) {
+function createNotifyId(objects) {
     var id = ''
     for(var i=0;i<objects.length-1;i++)
         id += objects[i][0] + objects[i][1]
@@ -404,7 +404,7 @@ function CreateNotifyId(objects) {
     return id
 }
 /////////////////////////////////
-var SERVER_HANDLER = function(req, res) {
+var server_handler = function(req, res) {
     {
         // LOG REQUEST INFORMATION TO STDOUT
         var url = req.url
@@ -435,18 +435,18 @@ var SERVER_HANDLER = function(req, res) {
         return res.end()
     }
     //////////////////////////////////////////
-    var root        = FindRoot(req.headers.host, req.url, ROOTS)
+    var root        = findRoot(req.headers.host, req.url, roots)
     if (!root)
-        return NotFound(res)
-    var realurl     = GetRealUrl(req.url, root)
+        return notFound(res)
+    var realurl     = getRealUrl(req.url, root)
     var a           = req.url.split('?')
     var url         = a[0]
     var qs          = querystring.parse(a[1])
-    var objects     = GetObjects(realurl)
-    var env         = CreateEnv(req, url, qs, objects, SITES_PATH + '/' + root.dir)
+    var objects     = getObjects(realurl)
+    var env         = createEnv(req, url, qs, objects, sites_path + '/' + root.dir)
     var objectname  = objects.length > 0 ? objects[objects.length-1][0] : ''
-    var rootpath    = path.join(SITES_PATH, root.dir)
-    var filename    = GetFileName(req.method, objects)
+    var rootpath    = path.join(sites_path, root.dir)
+    var filename    = getFilename(req.method, objects)
     var filepath    = path.join(rootpath, objectname)
 
     req.on('no static', function() {
@@ -459,11 +459,11 @@ var SERVER_HANDLER = function(req, res) {
     })
 
     req.on('no api', function() {
-        fs.exists(path.join(rootpath, DEFAULT_SCRIPT), function(exists) {
+        fs.exists(path.join(rootpath, default_script), function(exists) {
             if (exists)
-                executeAPI(rootpath, DEFAULT_SCRIPT)
+                executeAPI(rootpath, default_script)
             else
-                NotFound(res)
+                notFound(res)
         })
     })
 
@@ -475,7 +475,7 @@ var SERVER_HANDLER = function(req, res) {
 
     function executeAPI(path, filename) {
         var waitid   = qs['_wait'] ? qs['_wait'].substr(0,22) : null
-        var notifyid = (waitid || req.method != 'GET') ? CreateNotifyId(objects) : null
+        var notifyid = (waitid || req.method != 'GET') ? createNotifyId(objects) : null
         //////////////////////////////////////
         var f = function() {
             if (waitid) {
@@ -483,11 +483,11 @@ var SERVER_HANDLER = function(req, res) {
                 root.lastwait[waitid] = new Date
             }
             //////////////////////////////////
-            var exec = ExecuteFile.bind(this, req, res, path, filename, env)
-            if (IsMultipart(req))
-                HandleMultipart(req, res, env, exec)
-            else if (IsFormUrlEncoded(req))
-                HandleFormUrlEncoded(req, env, exec)
+            var exec = executeFile.bind(this, req, res, path, filename, env)
+            if (isMultipart(req))
+                handleMultipart(req, res, env, exec)
+            else if (isFormUrlEncoded(req))
+                handleFormUrlEncoded(req, env, exec)
             else
                 exec()
         }
@@ -521,66 +521,66 @@ var SERVER_HANDLER = function(req, res) {
     }
 
 }
-var SERVER_HANDLER_REDIRECT = function(req, res) {
+var server_handler_redirect = function(req, res) {
     req.on('error', function(error) {
         console.error('REDIRECT REQUEST ERROR: %s', error.message)
     })
     res.statusCode = 302
     var host = req.headers.host
-    if (HTTPS_PORT !== 443)
-        host = host.split(':')[0] + ':' + HTTPS_PORT
+    if (https_port !== 443)
+        host = host.split(':')[0] + ':' + https_port
     res.setHeader('Location', 'https://' + host + req.url)
     res.end('302 Moved')
 }
-var IS_GREET = false
-var IS_GETROOTS = false
-var LISTEN_HANDLER = function(port) {
+var is_greet = false
+var is_getroots = false
+var listen_handler = function(port) {
     return function() {
-        if (! IS_GETROOTS) {
-            GetRoots(SITES_PATH, function(roots) {
-                ROOTS = roots
-                for(var i=0; i<roots.length; i++)
-                    console.error('Site found:', roots[i].dir)
+        if (!is_getroots) {
+            getRoots(sites_path, function(r) {
+                roots = r
+                for(var i=0; i<r.length; i++)
+                    console.error('Site found:', r[i].dir)
             })
-            IS_GETROOTS = true
+            is_getroots = true
         }
-        if (! IS_GREET) {
+        if (!is_greet) {
             console.error('Welcome to XCGI!')
-            console.error('Sites path at', SITES_PATH)
-            console.error('Max instances is', CONFIG.maxInstances)
-            console.error('Shell used is', SHELL)
-            console.error('HTTP port is', HTTP_PORT)
-            console.error('HTTPS port is', HTTPS_PORT)
-            IS_GREET = true
+            console.error('Sites path at', sites_path)
+            console.error('Max instances is', config.maxInstances)
+            console.error('Shell used is', shell)
+            console.error('HTTP port is', http_port)
+            console.error('HTTPS port is', https_port)
+            is_greet = true
         }
         console.error('Online at port', port)
     }
 }
 // MAIN ///////////////////////////////
-if (CONFIG.http && ! CONFIG.redirect) {
-    http.createServer(SERVER_HANDLER).listen(HTTP_PORT, LISTEN_HANDLER(HTTP_PORT))
+if (config.http && ! config.redirect) {
+    http.createServer(server_handler).listen(http_port, listen_handler(http_port))
 }
-if (CONFIG.http && CONFIG.redirect) {
-    http.createServer(SERVER_HANDLER_REDIRECT).listen(HTTP_PORT, LISTEN_HANDLER(HTTP_PORT))
+if (config.http && config.redirect) {
+    http.createServer(server_handler_redirect).listen(http_port, listen_handler(http_port))
 }
-if (CONFIG.https) {
-    https.createServer(CONFIG.httpsOption, SERVER_HANDLER).listen(HTTPS_PORT, LISTEN_HANDLER(HTTPS_PORT))
+if (config.https) {
+    https.createServer(config.httpsOption, server_handler).listen(https_port, listen_handler(https_port))
 }
-fs.watch(SITES_PATH, function(type, filename) {
+fs.watch(sites_path, function(type, filename) {
     console.error('Reloading sites...')
-    GetRoots(SITES_PATH, function(roots) {
-        roots = FilterNewRoots(roots, ROOTS)
-        ROOTS = ROOTS.concat(roots)
-        for(var i=0; i<roots.length; i++)
-            console.error('Site found:', roots[i].dir)
+    getRoots(sites_path, function(r) {
+        r = FilterNewRoots(r, roots)
+        roots = roots.concat(r)
+        for(var i=0; i<r.length; i++)
+            console.error('Site found:', r[i].dir)
     })
 })
 // GARBAGE COLLECTION /////////////////
 setInterval(function() {
     /////////////////////////////////
     // CLEAN UP LAST WAIT ID's
-    for(var i=0; i<ROOTS.length; i++)
-        ROOTS[i].lastwait = {}
+    for(var i=0; i<roots.length; i++)
+        roots[i].lastwait = {}
     /////////////////////////////////
 }, 60 * 60 * 1000) // HOURLY
 // HELPERS/UTILITIES //////////////////
