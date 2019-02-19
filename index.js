@@ -302,7 +302,7 @@ function rootIndexOf(root, roots) {
             return i
     return -1
 }
-function FilterNewRoots(roots, old_roots) {
+function filterNewRoots(roots, old_roots) {
     var r = []
     for(var i=0; i<roots.length; i++)
         if (rootIndexOf(roots[i], old_roots) === -1)
@@ -579,7 +579,7 @@ if (config.https) {
 fs.watch(sites_path, function(type, filename) {
     console.error('Reloading sites...')
     getRoots(sites_path, function(r) {
-        r = FilterNewRoots(r, roots)
+        r = filterNewRoots(r, roots)
         roots = roots.concat(r)
         for(var i=0; i<r.length; i++)
             console.error('Site found:', r[i].dir)
