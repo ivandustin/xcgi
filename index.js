@@ -4,31 +4,35 @@
  * Copyright (c) 2017-2018 Ivan Dustin Bilon
  * GNU AGPLv3 Licensed
  */
-var os = require('os')
-var http = require('http')
-var https = require('https')
-var serveStatic = require('serve-static')
-var querystring = require('querystring')
-var spawn = require('child_process').spawn
-var execFileSync = require('child_process').execFileSync
-var fs = require('fs')
-var path = require('path')
-var formidable = require('formidable')
-var EventEmitter = require('events').EventEmitter
+var package         = require('./package.json')
+var os              = require('os')
+var http            = require('http')
+var https           = require('https')
+var serveStatic     = require('serve-static')
+var querystring     = require('querystring')
+var spawn           = require('child_process').spawn
+var execFileSync    = require('child_process').execFileSync
+var fs              = require('fs')
+var path            = require('path')
+var formidable      = require('formidable')
+var EventEmitter    = require('events').EventEmitter
 /// HELP MESSAGE ////////////////
 function printHelp() {
     var msg = [
         'xcgi <options...> <sites path>',
         'Options:',
         '    -p <http port>:<https port>',
-        '                Specify different HTTP/HTTPS port number.',
-        '    -h          HTTP only. Turn off HTTPS.',
-        '    -s          HTTPS only. Turn off HTTP.',
-        '    -r          Redirect http to https. Off by default.',
-        '    -m <int>    Max instances of spawned process.',
-        '    --shell <>  Set the default shell to be used. Default is bash.',
-        '    --max-fields-size <int>  Max size of all fields in Form. Default is 128MB.',
-        '    --max-file-size <int>    Max file size in file uploads. Default is 256MB.'
+        '                             Specify different HTTP/HTTPS port number.',
+        '    -h                       HTTP only. Turn off HTTPS.',
+        '    -s                       HTTPS only. Turn off HTTP.',
+        '    -r                       Redirect http to https. Off by default.',
+        '    -m <int>                 Max instances of spawned process.',
+        '    --shell <>               Set the default shell to be used. Default is bash.',
+        '    --max-fields-size <int>  Max size of all fields in a Form. In megabytes.',
+        '                             Default is 128.',
+        '    --max-file-size <int>    Max file size in file uploads. In megabytes.',
+        '                             Default is 256.',
+        '    -V                       Print version.'
     ]
     for(var i=0;i<msg.length;i++)
         console.log(msg[i])
@@ -87,6 +91,17 @@ getopt(process.argv.splice(2), function(option, value) {
             return true
         case 'help':
             printHelp()
+            process.exit(0)
+            return false
+        case 'V':
+            console.log('%s %s', package.name, package.version)
+            console.log('Copyright (C) 2017 Free Software Foundation, Inc. <http://fsf.org/>')
+            console.log('License %s', package.license)
+            console.log('This is free software: you are free to change and redistribute it.')
+            console.log('There is NO WARRANTY, to the extent permitted by law.')
+            console.log('')
+            console.log('Designed and written by %s.', package.author.name)
+            console.log('Grace and peace to you from our Lord Jesus Christ.')
             process.exit(0)
             return false
         default:
