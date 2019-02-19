@@ -127,20 +127,20 @@ if (config.https) {
     }
 }
 /////////////////////////////////
-var shell = config.shell
-var roots = null
-var rootdir_delimiter = '_'
-var default_script = 'default.sh'
+var shell               = config.shell
+var roots               = []
+var rootdir_delimiter   = '_'
+var default_script      = 'default.sh'
 var script_status_codes = [200, 400, 404, 201, 204, 304, 403, 409, 401]
 /////////////////////////////////
 function Root() {
-    this.dir        = null
-    this.domain     = null
-    this.namespace  = null
-    this.emitter    = new EventEmitter
-    this.serveStatic = null
-    this.lastnotify = {}
-    this.lastwait   = {}
+    this.dir            = null
+    this.domain         = null
+    this.namespace      = null
+    this.emitter        = new EventEmitter
+    this.serveStatic    = null
+    this.lastnotify     = {}
+    this.lastwait       = {}
 }
 /////////////////////////////////
 function envValue(env, prefix, name, value) {
@@ -265,27 +265,36 @@ function executeFile(req, res, path, filename, env) {
         console.error('REQUEST ABORTED %s %s', path, filename)
     })
 }
-function getRoots(filepath, cb) {
-    var roots = []
+function sortRoots(roots) {
+    roots = roots.sort(function(a, b) {
+        return b.dir.length - a.dir.length
+    })
+    roots = roots.sort(function(a, b) {
+        if (a.dir[0] == '_')
+            return -1
+        return 1
+    })
+    return roots
+}
+function updateRoots(filepath, roots, cb) {
+    var newRoots = []
     fs.readdir(filepath, function(err, files) {
         if (err)
             throw err
-        files.sort(function(a, b) { return b.length - a.length })
-        files.sort(function(a, b) {
-            if (a[0] == '_')
-                return -1
-            return 1
-        })
         for(var i=0; i<files.length; i++) {
-            var a = files[i].split(rootdir_delimiter)
-            var root = new Root()
-            root.dir = files[i]
-            root.domain = a.shift()
-            root.namespace = '/' + a.join('/')
-            root.serveStatic = serveStatic(path.join(sites_path, root.dir), { redirect: false })
-            roots.push(root)
+            var root = roots.find(function(root) { return root.dir == files[i] })
+            if (!root) {
+                root                = new Root()
+                var a               = files[i].split(rootdir_delimiter)
+                root.dir            = files[i]
+                root.domain         = a.shift()
+                root.namespace      = '/' + a.join('/')
+                root.serveStatic    = serveStatic(path.join(sites_path, root.dir), { redirect: false })
+                newRoots.push(root)
+                roots.push(root)
+            }
         }
-        cb(roots)
+        cb(sortRoots(roots), newRoots)
     })
 }
 function findRoot(host, url, roots) {
@@ -301,13 +310,6 @@ function rootIndexOf(root, roots) {
         if (roots[i].dir == root.dir)
             return i
     return -1
-}
-function filterNewRoots(roots, old_roots) {
-    var r = []
-    for(var i=0; i<roots.length; i++)
-        if (rootIndexOf(roots[i], old_roots) === -1)
-            r.push(roots[i])
-    return r
 }
 function getRealUrl(url, root) {
     var idx = url.indexOf('?')
@@ -545,10 +547,11 @@ var is_getroots = false
 var listen_handler = function(port) {
     return function() {
         if (!is_getroots) {
-            getRoots(sites_path, function(r) {
-                roots = r
-                for(var i=0; i<r.length; i++)
-                    console.error('Site found:', r[i].dir)
+            updateRoots(sites_path, roots, function(allRoots, newRoots) {
+                roots = allRoots
+                newRoots.forEach(function(root) {
+                    console.error('Site found: %s', root.dir)
+                })
             })
             is_getroots = true
         }
@@ -578,11 +581,11 @@ if (config.https) {
 }
 fs.watch(sites_path, function(type, filename) {
     console.error('Reloading sites...')
-    getRoots(sites_path, function(r) {
-        r = filterNewRoots(r, roots)
-        roots = roots.concat(r)
-        for(var i=0; i<r.length; i++)
-            console.error('Site found:', r[i].dir)
+    updateRoots(sites_path, roots, function(allRoots, newRoots) {
+        roots = allRoots
+        newRoots.forEach(function(root) {
+            console.error('Site found: %s', root.dir)
+        })
     })
 })
 // GARBAGE COLLECTION /////////////////
