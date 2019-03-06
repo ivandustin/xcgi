@@ -266,15 +266,9 @@ function executeFile(req, res, path, filename, env) {
     })
 }
 function sortRoots(roots) {
-    roots = roots.sort(function(a, b) {
+    return roots.sort(function(a, b) {
         return b.dir.length - a.dir.length
     })
-    roots = roots.sort(function(a, b) {
-        if (a.dir[0] == '_')
-            return -1
-        return 1
-    })
-    return roots
 }
 function updateRoots(filepath, roots, cb) {
     var newRoots = []
@@ -549,7 +543,7 @@ var listen_handler = function(port) {
         if (!is_getroots) {
             updateRoots(sites_path, roots, function(allRoots, newRoots) {
                 roots = allRoots
-                newRoots.forEach(function(root) {
+                roots.forEach(function(root) {
                     console.error('Site found: %s', root.dir)
                 })
             })
