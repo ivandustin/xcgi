@@ -360,16 +360,6 @@ function newFormidable() {
     form.maxFileSize    = config.maxFileSize * 1024 * 1024
     return form
 }
-function isForm(req) {
-    if (req.headers['content-type'] &&
-        (
-            req.headers['content-type'].indexOf('multipart/form-data') == 0 ||
-            req.headers['content-type'].indexOf('application/x-www-form-urlencoded') == 0
-        ) &&
-        req.method != 'GET')
-        return true
-    return false
-}
 function handleForm(req, res, env, exec) {
     var form = newFormidable()
     form.on('error', function(error) {
@@ -490,10 +480,10 @@ var server_handler = function(req, res) {
             }
             //////////////////////////////////
             var exec = executeFile.bind(this, req, res, path, filename, env)
-            if (isForm(req))
-                handleForm(req, res, env, exec)
-            else
+            if (req.method == 'GET')
                 exec()
+            else
+                handleForm(req, res, env, exec)
         }
         // IMPLEMENT _wait /////
         if (waitid && req.method == 'GET') {
