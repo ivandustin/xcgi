@@ -334,6 +334,11 @@ function getObjects(url) {
     }
     return objects
 }
+function decodeURIObject(object) {
+    if (object[1])
+        object[1] = decodeURI(object[1])
+    return object
+}
 function getFilename(method, objects) {
     var file = false
     if (method == 'GET')
@@ -440,7 +445,7 @@ var server_handler = function(req, res) {
     var a           = req.url.split('?')
     var url         = a[0]
     var qs          = querystring.parse(a[1])
-    var objects     = getObjects(realurl)
+    var objects     = getObjects(realurl).filter(decodeURIObject)
     var env         = createEnv(req, url, qs, objects, sites_path + '/' + root.dir)
     var objectname  = objects.length > 0 ? objects[objects.length-1][0] : ''
     var rootpath    = path.join(sites_path, root.dir)
