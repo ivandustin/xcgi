@@ -139,6 +139,7 @@ function Root() {
     this.namespace      = null
     this.emitter        = new EventEmitter
     this.serveStatic    = null
+    this.objectCount    = 0
     this.lastnotify     = {}
     this.lastwait       = {}
 }
@@ -267,7 +268,7 @@ function executeFile(req, res, path, filename, env) {
 }
 function sortRoots(roots) {
     return roots.sort(function(a, b) {
-        return b.dir.length - a.dir.length
+        return b.objectCount - a.objectCount
     })
 }
 function updateRoots(filepath, roots, cb) {
@@ -284,6 +285,7 @@ function updateRoots(filepath, roots, cb) {
                 root.domain         = a.shift()
                 root.namespace      = '/' + a.join('/')
                 root.serveStatic    = serveStatic(path.join(sites_path, root.dir), { redirect: false })
+                root.objectCount    = (root.dir == "_") ? 0 : root.dir.split("_").length
                 newRoots.push(root)
                 roots.push(root)
             }
