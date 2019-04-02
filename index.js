@@ -487,7 +487,8 @@ var server_handler = function(req, res) {
 
     function executeAPI(path, filename) {
         var waitid   = qs['_wait'] ? qs['_wait'].substr(0,22) : null
-        var notifyid = (waitid                  ||
+        var notifyid = objects.length > 0       &&
+                       (waitid                  ||
                         req.method == 'POST'    ||
                         req.method == 'PUT'     ||
                         req.method == 'DELETE') ? createNotifyId(objects) : null
