@@ -340,19 +340,21 @@ function decodeURIObject(object) {
     return object
 }
 function getFilename(method, objects) {
-    var file = false
-    if (method == 'GET')
-        if (objects.length > 0 && objects[objects.length-1].length > 1)
-            file = 'show.sh'
-        else
-            file = 'index.sh'
-    else if (method == 'POST')
-        file = 'create.sh'
-    else if (method == 'PUT')
-        file = 'update.sh'
-    else if (method == 'DELETE')
-        file = 'destroy.sh'
-    return file
+    switch(method) {
+        case 'GET':
+            if (objects.length > 0 && objects[objects.length-1].length > 1)
+                return 'show.sh'
+            else
+                return 'index.sh'
+        case 'POST':
+            return 'create.sh'
+        case 'PUT':
+            return 'update.sh'
+        case 'DELETE':
+            return 'destroy.sh'
+        default:
+            return null
+    }
 }
 function notFound(res) {
     if (res.finished)
@@ -453,6 +455,13 @@ var server_handler = function(req, res) {
     var filepath    = path.join(rootpath, objectname)
 
     req.on('no static', function() {
+        if (filename !== null)
+            req.emit('api')
+        else
+            notFound(res)
+    })
+
+    req.on('api', function() {
         fs.exists(path.join(filepath, filename), function(exists) {
             if (exists)
                 executeAPI(filepath, filename)
@@ -478,7 +487,10 @@ var server_handler = function(req, res) {
 
     function executeAPI(path, filename) {
         var waitid   = qs['_wait'] ? qs['_wait'].substr(0,22) : null
-        var notifyid = (waitid || req.method != 'GET') ? createNotifyId(objects) : null
+        var notifyid = (waitid                  ||
+                        req.method == 'POST'    ||
+                        req.method == 'PUT'     ||
+                        req.method == 'DELETE') ? createNotifyId(objects) : null
         //////////////////////////////////////
         var f = function() {
             if (waitid) {
