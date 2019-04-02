@@ -403,9 +403,13 @@ function handleForm(req, res, env, exec) {
 // the fast string concatenation in ECMAScript.
 function createNotifyId(objects) {
     var id = ''
-    for(var i=0;i<objects.length-1;i++)
-        id += objects[i][0] + objects[i][1]
-    id += objects[objects.length-1][0]
+    if (objects.length > 0) {
+        for(var i=0;i<objects.length-1;i++)
+            id += objects[i][0] + objects[i][1]
+        id += objects[objects.length-1][0]
+    } else {
+        id = '/'
+    }
     return id
 }
 /////////////////////////////////
@@ -487,8 +491,7 @@ var server_handler = function(req, res) {
 
     function executeAPI(path, filename) {
         var waitid   = qs['_wait'] ? qs['_wait'].substr(0,22) : null
-        var notifyid = objects.length > 0       &&
-                       (waitid                  ||
+        var notifyid = (waitid                  ||
                         req.method == 'POST'    ||
                         req.method == 'PUT'     ||
                         req.method == 'DELETE') ? createNotifyId(objects) : null
