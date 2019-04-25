@@ -140,8 +140,8 @@ function Root() {
     this.emitter        = new EventEmitter
     this.serveStatic    = null
     this.objectCount    = 0
-    this.lastnotify     = {}
-    this.lastwait       = {}
+    this.last_notify     = {}
+    this.last_wait       = {}
 }
 /////////////////////////////////
 function envValue(env, prefix, name, value) {
@@ -399,12 +399,12 @@ function handleForm(req, res, env, exec) {
 }
 // createNotifyId concatenates REST objects
 // but the last ID is omitted. This is particularly
-// used as an index in lastnotify dictionary. This uses
+// used as an index in last_notify dictionary. This uses
 // the fast string concatenation in ECMAScript.
 function createNotifyId(objects) {
     var id = ''
     if (objects.length > 0) {
-        for(var i=0;i<objects.length-1;i++)
+        for(var i = 0; i < objects.length - 1; i++)
             id += objects[i][0] + objects[i][1]
         id += objects[objects.length-1][0]
     } else {
@@ -412,15 +412,25 @@ function createNotifyId(objects) {
     }
     return id
 }
+function getWaitId(req) {
+    return (req.method == 'GET' &&
+            req.headers['x-wait-id']) ? req.headers['x-wait-id'].substr(0, 22) : null
+}
+function getNotifyId(wait_id, objects, req) {
+    return (wait_id                 || 
+            req.method == 'POST'    || 
+            req.method == 'PUT'     || 
+            req.method == 'DELETE') ? createNotifyId(objects) : null
+}
 /////////////////////////////////
 var server_handler = function(req, res) {
     {
         // LOG REQUEST INFORMATION TO STDOUT
-        var url = req.url
+        var url   = req.url
         var start = new Date()
         console.log('%s %s %s', start.toLocaleString(), req.method, url)
         res.on('finish', function() {
-            var end = new Date()
+            var end      = new Date()
             var duration = end - start
             console.log('%s %s %s %s %sms', start.toLocaleString(), req.method, url, res.statusCode, duration)
         })
@@ -432,14 +442,13 @@ var server_handler = function(req, res) {
     //////////////////////////////////////////
     // HANDLE CORS
     if (req.method === 'OPTIONS') {
-        var headers = {}
-        // IE8 does not allow domains to be specified, just the *
-        // headers["Access-Control-Allow-Origin"] = req.headers.origin;
-        headers["Access-Control-Allow-Origin"] = "*"
-        headers["Access-Control-Allow-Methods"] = "POST, GET, PUT, DELETE, OPTIONS"
-        headers["Access-Control-Allow-Credentials"] = false
-        headers["Access-Control-Max-Age"] = '86400' // 24 hours
-        headers["Access-Control-Allow-Headers"] = "X-Requested-With, X-HTTP-Method-Override, Content-Type, Accept"
+        var headers = {
+            'Access-Control-Allow-Origin':      '*',
+            'Access-Control-Allow-Methods':     'POST, GET, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Credentials': false,
+            'Access-Control-Max-Age':           '86400', // 24 hours
+            'Access-Control-Allow-Headers':     'X-Requested-With, X-HTTP-Method-Override, Content-Type, Accept'
+        }
         res.writeHead(200, headers)
         return res.end()
     }
@@ -457,6 +466,8 @@ var server_handler = function(req, res) {
     var rootpath    = path.join(sites_path, root.dir)
     var filename    = getFilename(req.method, objects)
     var filepath    = path.join(rootpath, objectname)
+    var wait_id     = getWaitId(req)
+    var notify_id   = getNotifyId(wait_id, objects, req)
 
     req.on('no static', function() {
         if (filename !== null)
@@ -467,10 +478,12 @@ var server_handler = function(req, res) {
 
     req.on('api', function() {
         fs.exists(path.join(filepath, filename), function(exists) {
-            if (exists)
-                executeAPI(filepath, filename)
+            if (!exists)
+                return req.emit('no api')
+            if (req.headers.accept == 'text/event-stream')
+                handleAPIEventStream()
             else
-                req.emit('no api')
+                executeAPI(filepath, filename)
         })
     })
 
@@ -483,23 +496,21 @@ var server_handler = function(req, res) {
         })
     })
 
-    // MODIFY URL TO BE THE REAL URL SO THAT SERVE STATIC CAN WORK CORRECTLY.
-    req.url = realurl
-    root.serveStatic(req, res, function() {
-        req.emit('no static')
-    })
+    main()
+
+    function main() {
+        // MODIFY URL TO BE THE REAL URL SO THAT SERVE STATIC CAN WORK CORRECTLY.
+        req.url = realurl
+        root.serveStatic(req, res, function() {
+            req.emit('no static')
+        })
+    }
 
     function executeAPI(path, filename) {
-        var waitid   = qs['_wait'] ? qs['_wait'].substr(0,22) : null
-        var notifyid = (waitid                  ||
-                        req.method == 'POST'    ||
-                        req.method == 'PUT'     ||
-                        req.method == 'DELETE') ? createNotifyId(objects) : null
-        //////////////////////////////////////
         var f = function() {
-            if (waitid) {
-                root.emitter.removeListener(notifyid, f)
-                root.lastwait[waitid] = new Date
+            if (wait_id) {
+                root.emitter.removeListener(notify_id, f)
+                root.last_wait[wait_id] = new Date
             }
             //////////////////////////////////
             var exec = executeFile.bind(this, req, res, path, filename, env)
@@ -508,17 +519,15 @@ var server_handler = function(req, res) {
             else
                 handleForm(req, res, env, exec)
         }
-        // IMPLEMENT _wait /////
-        if (waitid && req.method == 'GET') {
-            if (root.lastnotify[notifyid] === undefined)
-                root.lastnotify[notifyid] = 0
-            ///////////////////////
-            var lastnotify  = root.lastnotify[notifyid]
-            var lastwait    = root.lastwait[waitid]
-            if (lastwait && (lastnotify === 0 || lastwait >= lastnotify)) {
-                root.emitter.on(notifyid, f)
+        if (wait_id) {
+            if (root.last_notify[notify_id] === undefined)
+                root.last_notify[notify_id] = 0
+            var last_notify  = root.last_notify[notify_id]
+            var last_wait    = root.last_wait[wait_id]
+            if (last_wait && (last_notify === 0 || last_wait >= last_notify)) {
+                root.emitter.on(notify_id, f)
                 req.on('close', function() {
-                    root.emitter.removeListener(notifyid, f)
+                    root.emitter.removeListener(notify_id, f)
                 })
             } else {
                 f()
@@ -528,13 +537,33 @@ var server_handler = function(req, res) {
         }
         ///////////////////////
         res.on('finish', function() {
-            if (root.lastnotify[notifyid] !== undefined &&
-                req.method != 'GET' &&
-                res.statusCode >= 200 && res.statusCode < 300) {
-                root.lastnotify[notifyid] = new Date
-                root.emitter.emit(notifyid)
+            if (root.last_notify[notify_id] !== undefined    &&
+                req.method != 'GET'                         &&
+                res.statusCode >= 200                       &&
+                res.statusCode < 300) {
+                root.last_notify[notify_id] = new Date
+                root.emitter.emit(notify_id)
             }
         })
+    }
+
+    function handleAPIEventStream() {
+        var notify_id = createNotifyId(objects)
+        var headers = {
+            'Content-Type':  'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection':    'keep-alive'
+        }
+        res.writeHead(200, headers)
+        root.emitter.on(notify_id, sendData)
+        req.on('close', function() {
+            res.end()
+            root.emitter.removeListener(notify_id, sendData)
+        })
+        function sendData() {
+            if (!res.finished)
+                res.write('data:\n\n')
+        }
     }
 
 }
@@ -563,7 +592,7 @@ var listen_handler = function(port) {
             is_getroots = true
         }
         if (!is_greet) {
-            console.error('Welcome to XCGI!')
+            console.error('Welcome to XCGI2!')
             console.error('Sites path at', sites_path)
             console.error('Max instances is', config.maxInstances)
             console.error('Shell used is', shell)
@@ -600,7 +629,7 @@ setInterval(function() {
     /////////////////////////////////
     // CLEAN UP LAST WAIT ID's
     for(var i=0; i<roots.length; i++)
-        roots[i].lastwait = {}
+        roots[i].last_wait = {}
     /////////////////////////////////
 }, 60 * 60 * 1000) // HOURLY
 // HELPERS/UTILITIES //////////////////
