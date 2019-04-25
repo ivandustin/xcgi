@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>EventSource</title>
+</head>
+<body>
+
+</body>
+<script type="text/javascript">
+	var source = new EventSource('/api')
+	source.addEventListener('message', function(e) {
+		console.log('/api updates')
+	})
+</script>
+</html>
